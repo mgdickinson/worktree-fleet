@@ -37,6 +37,8 @@ worktree-fleet setup --adapter codex
 fleet codex
 ```
 
+`fleet codex` runs `codex` if it is on `PATH`, otherwise it falls back to the Codex.app binary at `/Applications/Codex.app/Contents/Resources/codex`. Set `WORKTREE_FLEET_CODEX_BIN=/path/to/codex` if your Codex binary lives somewhere else.
+
 For any other CLI agent:
 
 ```sh
