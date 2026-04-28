@@ -23,6 +23,14 @@ worktree-fleet activity
 
 Use the output as the fleet board. Call out pending main targets, divergent targets, blocked reasons, dirty files, upcoming intent, contention, and recent main events. If no sessions appear, run `worktree-fleet doctor` and report the actionable fix.
 
+When the task involves catching up with the integration branch, prefer:
+
+```sh
+worktree-fleet sync
+```
+
+Do this before any manual `git pull`, `git merge main`, or `git rebase main` flow. If fleet blocks, surface that block instead of bypassing it with Git.
+
 When creating or switching worktrees, keep fleet visible:
 
 1. Check `worktree-fleet status --refresh-current` before changing worktrees.

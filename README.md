@@ -21,6 +21,8 @@ Now open Claude in any Git repo. On session start, the plugin initializes fleet 
 
 From then on, Claude has fleet awareness while it works.
 
+If Claude tries to manually `git pull`, `git merge main`, or `git rebase main`, the plugin redirects it back through `worktree-fleet sync` so fleet can do the safety check first.
+
 ## What You Get
 
 - Active Claude sessions across sibling worktrees

@@ -21,6 +21,7 @@ For creation:
 
 For ongoing coordination:
 
+- Before manually pulling, merging, or rebasing against the integration branch, run `worktree-fleet sync`.
 - Use `worktree-fleet watch` when the user wants a live view.
 - Surface blocked reasons, divergent main targets, and contended files before proceeding.
 - Do not bypass staged-index, active-operation, dirty-overlap, missing-object, or divergent-target blocks.

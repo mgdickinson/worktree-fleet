@@ -405,6 +405,12 @@ function claudeHook(): number {
   }
 
   if (event === "PreToolUse") {
+    const manualGitCatchup = manualGitCatchupBlock(input, cwd);
+    if (manualGitCatchup) {
+      console.error(manualGitCatchup);
+      return 2;
+    }
+
     const session = ensureClaudeSession(cwd);
     const touched = extractToolPaths(input, cwd);
     if (touched.length > 0) {
@@ -869,6 +875,58 @@ function extractToolPaths(input: Record<string, unknown>, cwd: string): string[]
     if (!repo || !path.isAbsolute(normalized)) return normalized;
     return path.relative(realPathBestEffort(repo.root), realPathBestEffort(normalized)).replace(/\\/g, "/");
   }))).sort();
+}
+
+function manualGitCatchupBlock(input: Record<string, unknown>, cwd: string): string | null {
+  if (input.tool_name !== "Bash") return null;
+  const toolInput = input.tool_input;
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) return null;
+  const command = (toolInput as Record<string, unknown>).command;
+  if (typeof command !== "string" || !command.trim()) return null;
+
+  const branch = safe(() => ensureRepoConfig(cwd).integration_branch) ?? "main";
+  if (!isManualGitCatchup(command, branch)) return null;
+
+  return [
+    "worktree-fleet blocked manual Git catch-up.",
+    `This repo's integration branch is ${branch}. Run worktree-fleet sync first so fleet can merge safely or report the exact block.`,
+    "After sync reports merged/noop, retry the Git command only if it is still needed.",
+    `blocked command: ${command.split(/\r?\n/, 1)[0].slice(0, 160)}`
+  ].join("\n");
+}
+
+function isManualGitCatchup(command: string, integrationBranch: string): boolean {
+  const stripped = stripContinuationCommands(command);
+  const branch = escapeRegExp(integrationBranch);
+  const target = `(?:origin/|refs/heads/|refs/remotes/origin/)?${branch}`;
+
+  if (/\bgit(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?\s+pull\b/.test(stripped)) return true;
+
+  const rebase = new RegExp(`\\bgit(?:\\s+-C\\s+(?:"[^"]+"|'[^']+'|\\S+))?\\s+rebase\\b([^;&|\\n]*)`, "g");
+  for (const match of stripped.matchAll(rebase)) {
+    const args = match[1] ?? "";
+    if (/\s--(?:continue|abort|skip)\b/.test(args)) continue;
+    if (new RegExp(`(^|\\s)${target}(\\s|$)`).test(args)) return true;
+  }
+
+  const merge = new RegExp(`\\bgit(?:\\s+-C\\s+(?:"[^"]+"|'[^']+'|\\S+))?\\s+merge\\b([^;&|\\n]*)`, "g");
+  for (const match of stripped.matchAll(merge)) {
+    const args = match[1] ?? "";
+    if (/\s--(?:abort|continue|quit)\b/.test(args)) continue;
+    if (new RegExp(`(^|\\s)${target}(\\s|$)`).test(args)) return true;
+  }
+
+  return false;
+}
+
+function stripContinuationCommands(command: string): string {
+  return command
+    .replace(/\\\r?\n/g, " ")
+    .replace(/^\s*#.*$/gm, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function realPathBestEffort(file: string): string {

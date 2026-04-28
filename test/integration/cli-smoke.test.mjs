@@ -140,6 +140,34 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   const intent = JSON.parse(fs.readFileSync(path.join(state, "intents", sessionFile), "utf8"));
   assert.ok(intent.tool_touched.includes("file.txt"));
 
+  const manualRebase = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "PreToolUse",
+      cwd: repo,
+      tool_name: "Bash",
+      tool_input: { command: "git rebase main" }
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(manualRebase.status, 2);
+  assert.match(manualRebase.stderr, /worktree-fleet blocked manual Git catch-up/);
+  assert.match(manualRebase.stderr, /worktree-fleet sync first/);
+
+  const rebaseContinue = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "PreToolUse",
+      cwd: repo,
+      tool_name: "Bash",
+      tool_input: { command: "git rebase --continue" }
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(rebaseContinue.status, 0, rebaseContinue.stderr);
+
   const sessionEnd = spawnSync("node", [cli, "claude-hook"], {
     cwd: repo,
     input: JSON.stringify({ hook_event_name: "SessionEnd", cwd: repo }),
