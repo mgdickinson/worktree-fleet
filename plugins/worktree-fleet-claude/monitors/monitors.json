@@ -1,0 +1,7 @@
+[
+  {
+    "name": "worktree-fleet-sidecar",
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/worktree-fleet-claude-sidecar",
+    "description": "Publishes Claude dirty snapshots, watches main events, and fetches remote main on the fleet interval."
+  }
+]

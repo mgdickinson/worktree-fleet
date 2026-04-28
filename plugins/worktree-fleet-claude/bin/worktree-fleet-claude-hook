@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+run_worktree_fleet() {
+  if [[ -n "${WORKTREE_FLEET_BIN:-}" ]]; then
+    if [[ "${WORKTREE_FLEET_BIN}" == *.js ]]; then
+      exec node "${WORKTREE_FLEET_BIN}" "$@"
+    fi
+    exec "${WORKTREE_FLEET_BIN}" "$@"
+  fi
+
+  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js" ]]; then
+    exec node "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js" "$@"
+  fi
+
+  if command -v worktree-fleet >/dev/null 2>&1; then
+    exec worktree-fleet "$@"
+  fi
+
+  exec npm exec --yes --package @mgdickinson/worktree-fleet@latest -- worktree-fleet "$@"
+}
+
+run_worktree_fleet claude-hook

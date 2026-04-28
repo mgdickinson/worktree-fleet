@@ -1,0 +1,22 @@
+{
+  "name": "worktree-fleet-codex",
+  "version": "0.1.0",
+  "description": "Codex workflow guidance for worktree-fleet local coordination.",
+  "license": "MIT",
+  "keywords": ["codex", "git", "worktree", "coordination"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "worktree-fleet",
+    "shortDescription": "Coordinate Codex sessions across Git worktrees.",
+    "longDescription": "Adds workflow guidance for using worktree-fleet with Codex: setup, sync, status checks, intent declarations, and safe handoffs across sibling worktrees.",
+    "developerName": "worktree-fleet",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Set up worktree-fleet for this repo.",
+      "Sync this worktree with fleet.",
+      "Show fleet status before I edit."
+    ],
+    "brandColor": "#2563EB"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "worktree-fleet",
+  "owner": {
+    "name": "worktree-fleet"
+  },
+  "description": "Local worktree coordination plugins.",
+  "plugins": [
+    {
+      "name": "worktree-fleet",
+      "source": {
+        "source": "npm",
+        "package": "@mgdickinson/worktree-fleet",
+        "version": "^0.1.0"
+      },
+      "description": "Coordinate Claude Code, Codex, and generic CLI agents across sibling Git worktrees.",
+      "version": "0.1.0",
+      "category": "productivity"
+    }
+  ]
+}

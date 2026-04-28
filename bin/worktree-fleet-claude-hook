@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ -x "${root}/plugins/worktree-fleet-claude/bin/worktree-fleet-claude-hook" ]]; then
+  exec "${root}/plugins/worktree-fleet-claude/bin/worktree-fleet-claude-hook" "$@"
+fi
+
+if [[ -x "${root}/bin/worktree-fleet" ]]; then
+  exec "${root}/bin/worktree-fleet" claude-hook "$@"
+fi
+
+exec npm exec --yes --package @mgdickinson/worktree-fleet@latest -- worktree-fleet claude-hook "$@"

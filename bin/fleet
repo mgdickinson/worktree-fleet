@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/dist/cli/fleet.js" ]]; then
+  exec node "${CLAUDE_PLUGIN_ROOT}/dist/cli/fleet.js" "$@"
+fi
+
+if [[ -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/dist/cli/fleet.js" ]]; then
+  exec node "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/dist/cli/fleet.js" "$@"
+fi
+
+exec npm exec --yes --package @mgdickinson/worktree-fleet@latest -- fleet "$@"

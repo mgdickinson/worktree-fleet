@@ -1,0 +1,20 @@
+{
+  "name": "worktree-fleet",
+  "interface": {
+    "displayName": "worktree-fleet"
+  },
+  "plugins": [
+    {
+      "name": "worktree-fleet-codex",
+      "source": {
+        "source": "local",
+        "path": "./plugins/worktree-fleet-codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
