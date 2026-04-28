@@ -39,3 +39,5 @@ When creating or switching worktrees, keep fleet visible:
 4. If the worktree is behind, run `worktree-fleet sync`.
 5. For planned file edits, declare intent with `worktree-fleet intent declare <path...>`.
 6. Suggest `worktree-fleet watch` when the user wants to monitor sessions, conflicts, or resolutions live.
+
+The plugin intentionally blocks raw Bash worktree mutations until a fleet status/sync/watch command appears first in the same command. If that happens, run the fleet check, read the board, then retry only the Git operation that still makes sense.

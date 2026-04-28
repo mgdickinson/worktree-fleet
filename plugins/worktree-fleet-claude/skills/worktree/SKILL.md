@@ -11,6 +11,8 @@ Before creating, switching, or modifying worktrees, run:
 worktree-fleet status --refresh-current
 ```
 
+Claude Bash hooks block `git worktree add/remove/move/prune/repair` and `git branch -d/-D` until a fleet status/sync/watch command appears earlier in the same Bash command. This is intentional: worktree lifecycle changes should start from the fleet board, not raw Git alone.
+
 For creation:
 
 1. Inspect existing worktrees with `git worktree list`.

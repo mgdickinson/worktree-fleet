@@ -23,6 +23,8 @@ From then on, Claude has fleet awareness while it works.
 
 If Claude tries to manually `git pull`, `git merge main`, or `git rebase main`, the plugin redirects it back through `worktree-fleet sync` so fleet can do the safety check first.
 
+If Claude tries to mutate worktrees with raw Git, the plugin makes it check the fleet board first.
+
 ## What You Get
 
 - Active Claude sessions across sibling worktrees

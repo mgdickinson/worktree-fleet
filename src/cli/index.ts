@@ -411,6 +411,12 @@ function claudeHook(): number {
       return 2;
     }
 
+    const manualWorktreeLifecycle = manualGitWorktreeLifecycleBlock(input);
+    if (manualWorktreeLifecycle) {
+      console.error(manualWorktreeLifecycle);
+      return 2;
+    }
+
     const session = ensureClaudeSession(cwd);
     const touched = extractToolPaths(input, cwd);
     if (touched.length > 0) {
@@ -878,11 +884,8 @@ function extractToolPaths(input: Record<string, unknown>, cwd: string): string[]
 }
 
 function manualGitCatchupBlock(input: Record<string, unknown>, cwd: string): string | null {
-  if (input.tool_name !== "Bash") return null;
-  const toolInput = input.tool_input;
-  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) return null;
-  const command = (toolInput as Record<string, unknown>).command;
-  if (typeof command !== "string" || !command.trim()) return null;
+  const command = bashCommand(input);
+  if (!command) return null;
 
   const branch = safe(() => ensureRepoConfig(cwd).integration_branch) ?? "main";
   if (!isManualGitCatchup(command, branch)) return null;
@@ -893,6 +896,35 @@ function manualGitCatchupBlock(input: Record<string, unknown>, cwd: string): str
     "After sync reports merged/noop, retry the Git command only if it is still needed.",
     `blocked command: ${command.split(/\r?\n/, 1)[0].slice(0, 160)}`
   ].join("\n");
+}
+
+function manualGitWorktreeLifecycleBlock(input: Record<string, unknown>): string | null {
+  const command = bashCommand(input);
+  if (!command) return null;
+
+  const stripped = stripContinuationCommands(command);
+  const mutationIndex = firstManualWorktreeMutationIndex(stripped);
+  if (mutationIndex === null) return null;
+
+  const fleetCheckIndex = firstFleetWorktreeCheckIndex(stripped);
+  if (fleetCheckIndex !== null && fleetCheckIndex < mutationIndex) return null;
+  if (/\bWORKTREE_FLEET_ALLOW_GIT_WORKTREE=1\b/.test(stripped)) return null;
+
+  return [
+    "worktree-fleet blocked manual Git worktree lifecycle command.",
+    "Run worktree-fleet status --refresh-current first so fleet can surface active sessions, dirty files, intent, pending updates, and blocked work before changing worktrees.",
+    "Then rerun the Git command if it still makes sense.",
+    "For a newly-created worktree, run worktree-fleet status --refresh-current inside it before editing.",
+    `blocked command: ${command.split(/\r?\n/, 1)[0].slice(0, 160)}`
+  ].join("\n");
+}
+
+function bashCommand(input: Record<string, unknown>): string | null {
+  if (input.tool_name !== "Bash") return null;
+  const toolInput = input.tool_input;
+  if (!toolInput || typeof toolInput !== "object" || Array.isArray(toolInput)) return null;
+  const command = (toolInput as Record<string, unknown>).command;
+  return typeof command === "string" && command.trim() ? command : null;
 }
 
 function isManualGitCatchup(command: string, integrationBranch: string): boolean {
@@ -917,6 +949,22 @@ function isManualGitCatchup(command: string, integrationBranch: string): boolean
   }
 
   return false;
+}
+
+function firstManualWorktreeMutationIndex(command: string): number | null {
+  const indexes: number[] = [];
+  const gitPrefix = String.raw`\bgit(?:\s+-C\s+(?:"[^"]+"|'[^']+'|\S+))?`;
+  const worktree = new RegExp(`${gitPrefix}\\s+worktree\\s+(?:add|remove|move|prune|repair)\\b`, "g");
+  const branchDelete = new RegExp(`${gitPrefix}\\s+branch\\s+-(?:d|D)\\b`, "g");
+  for (const match of command.matchAll(worktree)) indexes.push(match.index ?? 0);
+  for (const match of command.matchAll(branchDelete)) indexes.push(match.index ?? 0);
+  return indexes.length ? Math.min(...indexes) : null;
+}
+
+function firstFleetWorktreeCheckIndex(command: string): number | null {
+  const checks = /\bworktree-fleet\s+(?:status|sync|watch)\b/g;
+  const match = checks.exec(command);
+  return match?.index ?? null;
 }
 
 function stripContinuationCommands(command: string): string {
