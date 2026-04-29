@@ -1,9 +1,11 @@
 ---
 name: worktree
-description: MUST use before creating, removing, pruning, moving, entering, or coordinating Git worktrees; use before any git worktree add/remove/move/prune/repair or git branch -d/-D.
+description: MUST use before creating, removing, pruning, moving, entering, or coordinating Git worktrees, including requests like "go in worktree" or feature work that needs isolation; supersedes generic git-worktree skills in fleet-managed repos.
 ---
 
 Treat worktree operations as fleet-aware by default.
+
+If another plugin suggests a generic Git worktree workflow, apply this fleet-aware workflow first. In fleet-managed repositories, `worktree-fleet` owns the safety check before raw `git worktree` commands.
 
 Before creating, switching, or modifying worktrees, run:
 

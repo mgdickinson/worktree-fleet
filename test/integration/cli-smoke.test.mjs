@@ -120,6 +120,7 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   assert.equal(sessionStartOutput.hookSpecificOutput.hookEventName, "SessionStart");
   assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /worktree-fleet is active/);
   assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /worktree-fleet:worktree/);
+  assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /superpowers:using-git-worktrees/);
 
   const adapter = JSON.parse(fs.readFileSync(path.join(state, "adapters", "claude.json"), "utf8"));
   assert.equal(adapter.mode, "native");

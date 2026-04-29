@@ -1,7 +1,7 @@
 {
   "name": "worktree-fleet",
   "description": "Coordinate Claude Code, Codex, and generic CLI agents across sibling Git worktrees.",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "author": {
     "name": "worktree-fleet"
   },
