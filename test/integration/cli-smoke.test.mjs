@@ -116,7 +116,10 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
     encoding: "utf8"
   });
   assert.equal(sessionStart.status, 0, sessionStart.stderr);
-  assert.match(sessionStart.stdout, /worktree-fleet active/);
+  const sessionStartOutput = JSON.parse(sessionStart.stdout);
+  assert.equal(sessionStartOutput.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /worktree-fleet is active/);
+  assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /worktree-fleet:worktree/);
 
   const adapter = JSON.parse(fs.readFileSync(path.join(state, "adapters", "claude.json"), "utf8"));
   assert.equal(adapter.mode, "native");

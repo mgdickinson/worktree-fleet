@@ -402,7 +402,12 @@ function claudeHook(): number {
 
   if (event === "SessionStart") {
     const session = bootstrapClaudeSession(cwd);
-    console.log(`worktree-fleet active for ${session.branch}. Use /worktree-fleet:fleet or worktree-fleet status for the fleet board.`);
+    console.log(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "SessionStart",
+        additionalContext: claudeSessionContext(session.branch)
+      }
+    }));
     return 0;
   }
 
@@ -861,6 +866,19 @@ function bootstrapClaudeSession(cwd: string) {
 function ensureClaudeSession(cwd: string) {
   ensureStateRoot();
   return ensureSession(cwd, "claude-code");
+}
+
+function claudeSessionContext(branch: string): string {
+  return [
+    "<worktree-fleet>",
+    `worktree-fleet is active in this repo on branch ${branch}.`,
+    "Critical workflow rules:",
+    "- For any request to create, open, switch, inspect, clean up, remove, prune, or coordinate Git worktrees, load and use the Skill tool for `worktree-fleet:worktree` before running shell commands.",
+    "- Do not start with raw `git worktree add/remove/move/prune/repair` or `git branch -d/-D`. First use `worktree-fleet:worktree` or run `worktree-fleet status --refresh-current` and read the fleet board.",
+    "- For catch-up with the integration branch, load/use `worktree-fleet:sync` before any `git pull`, `git merge main`, or `git rebase main` flow.",
+    "- If a fleet hook blocks a Bash command, follow the hook message instead of bypassing it.",
+    "</worktree-fleet>"
+  ].join("\n");
 }
 
 function readHookInput(): Record<string, unknown> {

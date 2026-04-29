@@ -1,6 +1,6 @@
 {
   "name": "@mgdickinson/worktree-fleet",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Local coordination for mixed AI coding sessions across git worktrees.",
   "license": "MIT",
   "publishConfig": {
