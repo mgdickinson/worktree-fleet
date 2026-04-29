@@ -181,7 +181,33 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   });
   assert.equal(manualWorktreeAdd.status, 2);
   assert.match(manualWorktreeAdd.stderr, /worktree-fleet blocked manual Git worktree lifecycle command/);
-  assert.match(manualWorktreeAdd.stderr, /status --refresh-current first/);
+  assert.match(manualWorktreeAdd.stderr, /worktree-fleet:worktree/);
+
+  const fleetStatusCheck = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "PreToolUse",
+      cwd: repo,
+      tool_name: "Bash",
+      tool_input: { command: "worktree-fleet status --refresh-current" }
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(fleetStatusCheck.status, 0, fleetStatusCheck.stderr);
+
+  const afterFleetStatusWorktreeAdd = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "PreToolUse",
+      cwd: repo,
+      tool_name: "Bash",
+      tool_input: { command: "git worktree add ../repo-feature -b feature" }
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(afterFleetStatusWorktreeAdd.status, 0, afterFleetStatusWorktreeAdd.stderr);
 
   const guardedWorktreeAdd = spawnSync("node", [cli, "claude-hook"], {
     cwd: repo,

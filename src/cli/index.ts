@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensureStateRoot } from "../core/init.js";
 import { stateRoot } from "../core/paths.js";
-import { ensureSession, findSessionForWorktree, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
+import { ensureIntent, ensureSession, findSessionForWorktree, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
 import { syncSession } from "../core/integration.js";
 import { listAdapters, readAdapter, registerAdapter, unregisterAdapter } from "../core/adapters.js";
 import { listActivity, logActivity } from "../core/activity.js";
@@ -19,6 +19,8 @@ import { ensureRepoConfig } from "../core/repo-config.js";
 import { readJsonFile } from "../core/fs.js";
 import { lastFetchPath } from "../core/paths.js";
 import type { IntentState, SessionState } from "../core/types.js";
+
+const FLEET_WORKTREE_CHECK_TTL_MS = 10 * 60 * 1000;
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const [command, ...rest] = argv;
@@ -405,19 +407,28 @@ function claudeHook(): number {
   }
 
   if (event === "PreToolUse") {
+    const session = ensureClaudeSession(cwd);
+    const command = bashCommand(input);
+    if (command && isFleetWorktreeCheck(command)) {
+      updateIntent(session.session_id, (intentState) => ({
+        ...intentState,
+        last_fleet_check_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }));
+    }
+
     const manualGitCatchup = manualGitCatchupBlock(input, cwd);
     if (manualGitCatchup) {
       console.error(manualGitCatchup);
       return 2;
     }
 
-    const manualWorktreeLifecycle = manualGitWorktreeLifecycleBlock(input);
+    const manualWorktreeLifecycle = manualGitWorktreeLifecycleBlock(input, session);
     if (manualWorktreeLifecycle) {
       console.error(manualWorktreeLifecycle);
       return 2;
     }
 
-    const session = ensureClaudeSession(cwd);
     const touched = extractToolPaths(input, cwd);
     if (touched.length > 0) {
       updateIntent(session.session_id, (intentState) => ({
@@ -898,7 +909,7 @@ function manualGitCatchupBlock(input: Record<string, unknown>, cwd: string): str
   ].join("\n");
 }
 
-function manualGitWorktreeLifecycleBlock(input: Record<string, unknown>): string | null {
+function manualGitWorktreeLifecycleBlock(input: Record<string, unknown>, session: ReturnType<typeof ensureSession>): string | null {
   const command = bashCommand(input);
   if (!command) return null;
 
@@ -908,12 +919,13 @@ function manualGitWorktreeLifecycleBlock(input: Record<string, unknown>): string
 
   const fleetCheckIndex = firstFleetWorktreeCheckIndex(stripped);
   if (fleetCheckIndex !== null && fleetCheckIndex < mutationIndex) return null;
+  if (hasRecentFleetWorktreeCheck(session)) return null;
   if (/\bWORKTREE_FLEET_ALLOW_GIT_WORKTREE=1\b/.test(stripped)) return null;
 
   return [
     "worktree-fleet blocked manual Git worktree lifecycle command.",
-    "Run worktree-fleet status --refresh-current first so fleet can surface active sessions, dirty files, intent, pending updates, and blocked work before changing worktrees.",
-    "Then rerun the Git command if it still makes sense.",
+    "Use the worktree-fleet:worktree skill for worktree creation/removal, or run worktree-fleet status --refresh-current first so fleet can surface active sessions, dirty files, intent, pending updates, and blocked work before changing worktrees.",
+    "After the fleet check, rerun the Git command only if it still makes sense.",
     "For a newly-created worktree, run worktree-fleet status --refresh-current inside it before editing.",
     `blocked command: ${command.split(/\r?\n/, 1)[0].slice(0, 160)}`
   ].join("\n");
@@ -965,6 +977,17 @@ function firstFleetWorktreeCheckIndex(command: string): number | null {
   const checks = /\bworktree-fleet\s+(?:status|sync|watch)\b/g;
   const match = checks.exec(command);
   return match?.index ?? null;
+}
+
+function isFleetWorktreeCheck(command: string): boolean {
+  return firstFleetWorktreeCheckIndex(stripContinuationCommands(command)) !== null;
+}
+
+function hasRecentFleetWorktreeCheck(session: ReturnType<typeof ensureSession>): boolean {
+  const checkedAt = ensureIntent(session.session_id).last_fleet_check_at;
+  if (!checkedAt) return false;
+  const age = Date.now() - Date.parse(checkedAt);
+  return !Number.isNaN(age) && age >= 0 && age <= FLEET_WORKTREE_CHECK_TTL_MS;
 }
 
 function stripContinuationCommands(command: string): string {

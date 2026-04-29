@@ -1,6 +1,6 @@
 ---
 name: worktree
-description: Use when the user asks to create, enter, inspect, clean up, coordinate, or work across Git worktrees.
+description: MUST use before creating, removing, pruning, moving, entering, or coordinating Git worktrees; use before any git worktree add/remove/move/prune/repair or git branch -d/-D.
 ---
 
 Treat worktree operations as fleet-aware by default.
@@ -11,7 +11,7 @@ Before creating, switching, or modifying worktrees, run:
 worktree-fleet status --refresh-current
 ```
 
-Claude Bash hooks block `git worktree add/remove/move/prune/repair` and `git branch -d/-D` until a fleet status/sync/watch command appears earlier in the same Bash command. This is intentional: worktree lifecycle changes should start from the fleet board, not raw Git alone.
+Claude Bash hooks block `git worktree add/remove/move/prune/repair` and `git branch -d/-D` until a recent fleet status/sync/watch check has happened. This is intentional: worktree lifecycle changes should start from the fleet board, not raw Git alone.
 
 For creation:
 

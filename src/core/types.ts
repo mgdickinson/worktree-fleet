@@ -71,6 +71,7 @@ export interface IntentState {
   session_id: string;
   tool_touched: string[];
   upcoming: string[];
+  last_fleet_check_at?: string | null;
   updated_at: string;
 }
 

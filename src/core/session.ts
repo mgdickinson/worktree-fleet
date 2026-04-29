@@ -166,6 +166,7 @@ export function ensureIntent(sessionId: string): IntentState {
     session_id: sessionId,
     tool_touched: [],
     upcoming: [],
+    last_fleet_check_at: null,
     updated_at: nowIso()
   };
   atomicWriteJson(intentPath(sessionId), intent);
