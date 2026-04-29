@@ -1,6 +1,6 @@
 {
   "name": "worktree-fleet-codex",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Codex workflow guidance for worktree-fleet local coordination.",
   "license": "MIT",
   "keywords": ["codex", "git", "worktree", "coordination"],

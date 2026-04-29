@@ -10,10 +10,10 @@
       "source": {
         "source": "npm",
         "package": "@mgdickinson/worktree-fleet",
-        "version": "^0.1.4"
+        "version": "^0.1.5"
       },
       "description": "Coordinate Claude Code, Codex, and generic CLI agents across sibling Git worktrees.",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "category": "productivity"
     }
   ]

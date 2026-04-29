@@ -1,15 +1,15 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 run_worktree_fleet() {
-  if [[ -n "${WORKTREE_FLEET_BIN:-}" ]]; then
-    if [[ "${WORKTREE_FLEET_BIN}" == *.js ]]; then
-      exec node "${WORKTREE_FLEET_BIN}" "$@"
-    fi
+  if [ -n "${WORKTREE_FLEET_BIN:-}" ]; then
+    case "${WORKTREE_FLEET_BIN}" in
+      *.js) exec node "${WORKTREE_FLEET_BIN}" "$@" ;;
+    esac
     exec "${WORKTREE_FLEET_BIN}" "$@"
   fi
 
-  if [[ -n "${CLAUDE_PLUGIN_ROOT:-}" && -f "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js" ]]; then
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js" ]; then
     exec node "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js" "$@"
   fi
 
