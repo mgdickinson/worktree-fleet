@@ -122,6 +122,35 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /worktree-fleet:worktree/);
   assert.match(sessionStartOutput.hookSpecificOutput.additionalContext, /superpowers:using-git-worktrees/);
 
+  const promptSubmit = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      cwd: repo,
+      prompt: "inline execution and go in worktree"
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(promptSubmit.status, 0, promptSubmit.stderr);
+  const promptSubmitOutput = JSON.parse(promptSubmit.stdout);
+  assert.equal(promptSubmitOutput.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+  assert.match(promptSubmitOutput.hookSpecificOutput.additionalContext, /worktree-fleet:using-git-worktrees/);
+  assert.match(promptSubmitOutput.hookSpecificOutput.additionalContext, /superpowers:using-git-worktrees/);
+
+  const unrelatedPrompt = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      cwd: repo,
+      prompt: "write a small unit test"
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(unrelatedPrompt.status, 0, unrelatedPrompt.stderr);
+  assert.equal(unrelatedPrompt.stdout, "");
+
   const adapter = JSON.parse(fs.readFileSync(path.join(state, "adapters", "claude.json"), "utf8"));
   assert.equal(adapter.mode, "native");
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));

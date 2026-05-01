@@ -411,6 +411,20 @@ function claudeHook(): number {
     return 0;
   }
 
+  if (event === "UserPromptSubmit") {
+    const prompt = typeof input.prompt === "string" ? input.prompt : "";
+    if (shouldInjectFleetWorktreePromptContext(prompt)) {
+      const branch = safe(() => ensureRepoConfig(cwd).integration_branch) ?? "main";
+      console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: claudeWorktreePromptContext(branch)
+        }
+      }));
+    }
+    return 0;
+  }
+
   if (event === "PreToolUse") {
     const session = ensureClaudeSession(cwd);
     const command = bashCommand(input);
@@ -879,6 +893,35 @@ function claudeSessionContext(branch: string): string {
     "- For catch-up with the integration branch, load/use `worktree-fleet:sync` before any `git pull`, `git merge main`, or `git rebase main` flow.",
     "- If a fleet hook blocks a Bash command, follow the hook message instead of bypassing it.",
     "</worktree-fleet>"
+  ].join("\n");
+}
+
+function shouldInjectFleetWorktreePromptContext(prompt: string): boolean {
+  const normalized = prompt.toLowerCase();
+  return [
+    /\bwork\s*tree(s)?\b/,
+    /\bworktree(s)?\b/,
+    /\bgo in (a )?work\s*tree\b/,
+    /\binline execution\b/,
+    /\bisolated (workspace|worktree|work tree)\b/,
+    /\bsibling work\s*tree(s)?\b/,
+    /\bparallel (agent|session|worktree|work tree)s?\b/,
+    /\bcreate .{0,40}(workspace|worktree|work tree)\b/,
+    /\bremove .{0,40}(worktree|work tree)\b/,
+    /\bprune .{0,40}(worktree|work tree)\b/
+  ].some((pattern) => pattern.test(normalized));
+}
+
+function claudeWorktreePromptContext(branch: string): string {
+  return [
+    "<worktree-fleet-prompt>",
+    `This prompt appears to involve Git worktrees in a fleet-managed repo. Integration branch: ${branch}.`,
+    "Use worktree-fleet before generic worktree guidance:",
+    "- Prefer the slash command `/worktree-fleet:worktree` or the Skill tool `worktree-fleet:using-git-worktrees` / `worktree-fleet:worktree`.",
+    "- This supersedes generic Git worktree workflows, including `superpowers:using-git-worktrees`, for this repo.",
+    "- Start with `worktree-fleet status --refresh-current` and read the fleet board before raw `git worktree` mutations.",
+    "- After creating or entering a worktree, run `worktree-fleet status --refresh-current` inside it; if pending is visible, run `worktree-fleet sync` before editing.",
+    "</worktree-fleet-prompt>"
   ].join("\n");
 }
 
