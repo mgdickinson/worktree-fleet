@@ -281,6 +281,39 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   assert.equal(session, null);
 });
 
+test("claude stop hook ignores transient session lock contention", () => {
+  const { repo, state } = makeTempRepo();
+  const sessionStart = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({ hook_event_name: "SessionStart", cwd: repo }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(sessionStart.status, 0, sessionStart.stderr);
+
+  const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+  assert.ok(sessionFile);
+  const sessionId = path.basename(sessionFile, ".json");
+  fs.writeFileSync(path.join(state, "sessions", `${sessionId}.lock`), JSON.stringify({
+    pid: process.pid,
+    hostname: os.hostname(),
+    acquired_at: new Date().toISOString()
+  }, null, 2));
+
+  const stop = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({ hook_event_name: "Stop", cwd: repo }),
+    env: {
+      ...process.env,
+      WORKTREE_FLEET_HOME: state,
+      WORKTREE_FLEET_SESSION_LOCK_WAIT_MS: "25"
+    },
+    encoding: "utf8"
+  });
+  assert.equal(stop.status, 0, stop.stderr);
+  assert.equal(stop.stderr, "");
+});
+
 test("watch renders a one-shot fleet dashboard", () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);

@@ -7,6 +7,7 @@ import path from "node:path";
 
 export interface LockOptions {
   ttlMs: number;
+  stealExpired?: boolean;
 }
 
 function pidAlive(pid: number): boolean {
@@ -43,7 +44,8 @@ export function acquireFileLock(file: string, options: LockOptions): boolean {
   const expired = !existing || ageMs(existing.acquired_at) > options.ttlMs;
   const sameHost = existing?.hostname === os.hostname();
   const ownerDead = existing ? sameHost && !pidAlive(existing.pid) : true;
-  if (!expired || (sameHost && !ownerDead)) return false;
+  const canSteal = options.stealExpired || !sameHost || ownerDead;
+  if (!expired || !canSteal) return false;
 
   try {
     fs.unlinkSync(file);

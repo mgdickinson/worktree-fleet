@@ -6,18 +6,31 @@ import { intentPath, intentsDir, sessionLockPath, sessionPath, sessionsDir } fro
 import { atomicWriteJson, listJsonFiles, readJsonFile } from "./fs.js";
 import { nowIso } from "./time.js";
 import { getDirtyFiles } from "../git/dirty.js";
-import { getHeadSha, getRepoInfo } from "../git/repo.js";
+import { getRepoInfo } from "../git/repo.js";
 import { git } from "../git/command.js";
 import { contains, objectExists } from "../git/ancestry.js";
 import { acquireFileLock, releaseFileLock } from "./locks.js";
-import { applyEventToSession, normalizePendingTargets } from "./pending-targets.js";
+import { applyEventToSession } from "./pending-targets.js";
 import { readRepoConfig } from "./repo-config.js";
 import { logActivity } from "./activity.js";
 
 export const ADAPTER_VERSION = "0.1.0";
 const SESSION_LOCK_TTL_MS = 30 * 1000;
+const SESSION_LOCK_WAIT_MS = Number(process.env.WORKTREE_FLEET_SESSION_LOCK_WAIT_MS ?? 5 * 1000);
 const SLEEP_BUFFER = new SharedArrayBuffer(4);
 const SLEEP_VIEW = new Int32Array(SLEEP_BUFFER);
+
+export class SessionLockTimeoutError extends Error {
+  constructor(public readonly sessionId: string) {
+    super(`timed out waiting for session lock: ${sessionId}`);
+    this.name = "SessionLockTimeoutError";
+  }
+}
+
+export function isSessionLockTimeoutError(error: unknown): error is SessionLockTimeoutError {
+  return error instanceof SessionLockTimeoutError
+    || (error instanceof Error && /^timed out waiting for session lock: /.test(error.message));
+}
 
 export function defaultIntegration(): SessionState["integration"] {
   return {
@@ -238,10 +251,10 @@ function seedInitialPending(session: SessionState): SessionState {
 
 function withSessionLock<T>(sessionId: string, fn: () => T): T {
   const lockPath = sessionLockPath(sessionId);
-  const deadline = Date.now() + 5000;
-  while (!acquireFileLock(lockPath, { ttlMs: SESSION_LOCK_TTL_MS })) {
+  const deadline = Date.now() + SESSION_LOCK_WAIT_MS;
+  while (!acquireFileLock(lockPath, { ttlMs: SESSION_LOCK_TTL_MS, stealExpired: true })) {
     if (Date.now() > deadline) {
-      throw new Error(`timed out waiting for session lock: ${sessionId}`);
+      throw new SessionLockTimeoutError(sessionId);
     }
     sleepSync(25);
   }
@@ -259,53 +272,33 @@ function sleepSync(ms: number): void {
 
 function mergeSessionForWrite(latest: SessionState, proposed: SessionState): SessionState {
   const merged = structuredClone(proposed) as SessionState;
-  const beforePending = proposed.integration.pending?.event_id ?? null;
-  const beforeDivergent = new Set(proposed.integration.divergent_targets.map((target) => target.event_id));
+  const beforeTargets = targetKey(proposed);
   const candidates = uniqueTargets([
     proposed.integration.pending,
     ...proposed.integration.divergent_targets,
     latest.integration.pending,
     ...latest.integration.divergent_targets
-  ]).filter((target) => !isIntegrated(proposed.worktree_path, target));
+  ]);
 
   merged.integration.pending = proposed.integration.pending && candidates.some((target) => target.event_id === proposed.integration.pending?.event_id)
     ? proposed.integration.pending
     : candidates[0] ?? null;
   merged.integration.divergent_targets = candidates.filter((target) => target.event_id !== merged.integration.pending?.event_id);
 
-  const normalized = tryNormalize(proposed.worktree_path, merged);
-  const afterPending = normalized.integration.pending?.event_id ?? null;
-  const divergentChanged = normalized.integration.divergent_targets.some((target) => !beforeDivergent.has(target.event_id))
-    || beforeDivergent.size !== normalized.integration.divergent_targets.length;
-
-  if (afterPending !== beforePending || divergentChanged) {
-    normalized.integration.blocked = false;
-    normalized.integration.blocked_event_id = null;
-    normalized.integration.blocked_files = [];
-    normalized.integration.blocked_reason = null;
+  if (targetKey(merged) !== beforeTargets) {
+    merged.integration.blocked = false;
+    merged.integration.blocked_event_id = null;
+    merged.integration.blocked_files = [];
+    merged.integration.blocked_reason = null;
+    merged.integration.last_notified_block_key = null;
   }
 
-  if (normalized.integration.divergent_targets.length > 0) {
-    normalized.integration.blocked = true;
-    normalized.integration.blocked_event_id = normalized.integration.pending?.event_id ?? null;
-    normalized.integration.blocked_reason = "main target divergence";
-    normalized.integration.blocked_files = normalized.integration.divergent_targets.map((target) => target.sha);
+  if (!merged.integration.last_integrated_sha && latest.integration.last_integrated_sha) {
+    merged.integration.last_integrated_sha = latest.integration.last_integrated_sha;
   }
+  merged.last_absorbed_event_id = maxEventId(latest.last_absorbed_event_id, proposed.last_absorbed_event_id);
 
-  if (!normalized.integration.last_integrated_sha && latest.integration.last_integrated_sha) {
-    normalized.integration.last_integrated_sha = latest.integration.last_integrated_sha;
-  }
-  normalized.last_absorbed_event_id = maxEventId(latest.last_absorbed_event_id, proposed.last_absorbed_event_id);
-
-  return normalized;
-}
-
-function tryNormalize(cwd: string, session: SessionState): SessionState {
-  try {
-    return normalizePendingTargets(cwd, session).session;
-  } catch {
-    return session;
-  }
+  return merged;
 }
 
 function uniqueTargets(targets: Array<PendingTarget | null | undefined>): PendingTarget[] {
@@ -319,13 +312,11 @@ function uniqueTargets(targets: Array<PendingTarget | null | undefined>): Pendin
   return result;
 }
 
-function isIntegrated(cwd: string, target: PendingTarget): boolean {
-  try {
-    const head = getHeadSha(cwd);
-    return objectExists(cwd, target.sha) && contains(cwd, head, target.sha);
-  } catch {
-    return false;
-  }
+function targetKey(session: SessionState): string {
+  return [
+    session.integration.pending?.event_id ?? "",
+    ...session.integration.divergent_targets.map((target) => target.event_id).sort()
+  ].join("|");
 }
 
 function maxEventId(left: string | null | undefined, right: string | null | undefined): string | null {

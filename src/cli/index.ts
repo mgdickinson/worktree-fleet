@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensureStateRoot } from "../core/init.js";
 import { stateRoot } from "../core/paths.js";
-import { ensureIntent, ensureSession, findSessionForWorktree, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
+import { ensureIntent, ensureSession, findSessionForWorktree, isSessionLockTimeoutError, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
 import { syncSession } from "../core/integration.js";
 import { listAdapters, readAdapter, registerAdapter, unregisterAdapter } from "../core/adapters.js";
 import { listActivity, logActivity } from "../core/activity.js";
@@ -395,6 +395,15 @@ function hook(args: string[]): number {
 }
 
 function claudeHook(): number {
+  try {
+    return claudeHookUnsafe();
+  } catch (error) {
+    if (isSessionLockTimeoutError(error)) return 0;
+    throw error;
+  }
+}
+
+function claudeHookUnsafe(): number {
   const input = readHookInput();
   const event = typeof input.hook_event_name === "string" ? input.hook_event_name : "unknown";
   const cwd = typeof input.cwd === "string" ? input.cwd : process.cwd();
