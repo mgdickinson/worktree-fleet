@@ -475,7 +475,8 @@ function claudeHookUnsafe(): number {
 
   if (event === "Stop") {
     if (input.stop_hook_active === true) return 0;
-    const session = bootstrapClaudeSession(cwd);
+    const session = ensureClaudeSession(cwd);
+    if (shouldSkipRepeatedStopBlock(session)) return 0;
     const result = syncSession(session);
     if (result.status === "blocked" || result.status === "error") {
       const latest = readSession(session.session_id) ?? result.session;
@@ -1090,6 +1091,13 @@ function blockKey(session: ReturnType<typeof ensureSession>): string | null {
   const divergent = session.integration.divergent_targets.map((target) => target.sha).sort().join(",");
   const files = [...session.integration.blocked_files].sort().join(",");
   return [pending, divergent, session.integration.blocked_reason ?? "-", files].join("|");
+}
+
+function shouldSkipRepeatedStopBlock(session: ReturnType<typeof ensureSession>): boolean {
+  const latest = readSession(session.session_id) ?? session;
+  if (latest.integration.blocked_reason !== "main target divergence") return false;
+  const key = blockKey(latest);
+  return Boolean(key && latest.integration.last_notified_block_key === key);
 }
 
 function formatClaudeBlockMessage(session: ReturnType<typeof ensureSession>): string {
