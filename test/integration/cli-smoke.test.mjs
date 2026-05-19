@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -383,6 +383,32 @@ test("sync records an event cursor after absorbing main events", () => {
   assert.match(second, /no pending main target|pending target already integrated/);
 });
 
+test("new sessions skip historic event backlog and seed from current main", () => {
+  const { repo, state, tmp } = makeTempRepo();
+  const wt = path.join(tmp, "wt");
+  const initial = run("git", ["rev-parse", "HEAD"], repo).trim();
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+
+  fs.appendFileSync(path.join(repo, "file.txt"), "abandoned-main\n");
+  run("git", ["add", "file.txt"], repo);
+  run("git", ["commit", "-q", "-m", "abandoned-main"], repo, { WORKTREE_FLEET_HOME: state });
+
+  run("git", ["reset", "--hard", initial], repo);
+  fs.writeFileSync(path.join(repo, "file.txt"), "current-main\n");
+  run("git", ["add", "file.txt"], repo);
+  run("git", ["commit", "-q", "-m", "current-main"], repo, { WORKTREE_FLEET_HOME: state });
+
+  run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
+  const output = cliRun(["sync"], wt, state);
+  assert.match(output, /no pending main target|pending target already integrated/);
+
+  const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+  assert.ok(sessionFile);
+  const session = JSON.parse(fs.readFileSync(path.join(state, "sessions", sessionFile), "utf8"));
+  assert.match(session.last_absorbed_event_id, /current-main|-[0-9a-f]{40}$/);
+  assert.equal(session.integration.blocked, false);
+});
+
 test("sidecar fetch tick publishes remote integration branch events", () => {
   const { repo, state, tmp } = makeTempRepo();
   const remote = path.join(tmp, "remote.git");
@@ -503,25 +529,55 @@ test("hook install preserves user hook content and uninstall removes only manage
   assert.doesNotMatch(uninstalled, /worktree-fleet managed block/);
 });
 
-test("later main SHA that does not contain pending becomes divergence", () => {
+test("later main SHA that does not contain pending becomes divergence", async () => {
   const { repo, state, tmp } = makeTempRepo();
   const wt = path.join(tmp, "wt");
   const initial = run("git", ["rev-parse", "HEAD"], repo).trim();
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
 
   fs.appendFileSync(path.join(repo, "file.txt"), "main-a\n");
   run("git", ["add", "file.txt"], repo);
   run("git", ["commit", "-q", "-m", "main-a"], repo, { WORKTREE_FLEET_HOME: state });
 
-  run("git", ["reset", "--hard", initial], repo);
-  fs.appendFileSync(path.join(repo, "file.txt"), "main-b\n");
-  run("git", ["add", "file.txt"], repo);
-  run("git", ["commit", "-q", "-m", "main-b"], repo, { WORKTREE_FLEET_HOME: state });
+  const sessionProcess = spawn("node", [
+    cli,
+    "session",
+    "start",
+    "--agent",
+    "generic-cli",
+    "--",
+    "node",
+    "-e",
+    "setTimeout(() => {}, 3000)"
+  ], {
+    cwd: wt,
+    env: { ...process.env, WORKTREE_FLEET_HOME: state, WORKTREE_FLEET_TICK_MS: "10000" },
+    encoding: "utf8"
+  });
 
-  const output = cliRun(["sync"], wt, state);
-  assert.match(output, /main target divergence/);
+  try {
+    await waitFor(() => {
+      const sessionsDir = path.join(state, "sessions");
+      if (!fs.existsSync(sessionsDir)) return false;
+      return fs.readdirSync(sessionsDir).some((entry) => entry.endsWith(".json"));
+    }, "session file");
+
+    const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+    assert.ok(sessionFile);
+    const startedSession = JSON.parse(fs.readFileSync(path.join(state, "sessions", sessionFile), "utf8"));
+    assert.equal(startedSession.integration.pending?.sha, run("git", ["rev-parse", "HEAD"], repo).trim());
+
+    run("git", ["reset", "--hard", initial], repo);
+    fs.appendFileSync(path.join(repo, "file.txt"), "main-b\n");
+    run("git", ["add", "file.txt"], repo);
+    run("git", ["commit", "-q", "-m", "main-b"], repo, { WORKTREE_FLEET_HOME: state });
+
+    const output = cliRun(["sync"], wt, state);
+    assert.match(output, /main target divergence/);
+  } finally {
+    sessionProcess.kill();
+  }
 });
 
 test("stale session writes preserve newer pending targets", async () => {
@@ -622,4 +678,12 @@ async function withState(state, fn) {
     if (previous === undefined) delete process.env.WORKTREE_FLEET_HOME;
     else process.env.WORKTREE_FLEET_HOME = previous;
   }
+}
+
+async function waitFor(condition, label) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`timed out waiting for ${label}`);
 }

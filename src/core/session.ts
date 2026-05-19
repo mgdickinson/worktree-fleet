@@ -13,6 +13,7 @@ import { acquireFileLock, releaseFileLock } from "./locks.js";
 import { applyEventToSession } from "./pending-targets.js";
 import { readRepoConfig } from "./repo-config.js";
 import { logActivity } from "./activity.js";
+import { listMainEvents } from "./events.js";
 
 export const ADAPTER_VERSION = "0.1.0";
 const SESSION_LOCK_TTL_MS = 30 * 1000;
@@ -63,7 +64,7 @@ export function createSession(cwd: string, agentKind: string): SessionState {
     heartbeat_at: now,
     dirty_files: dirtyFiles,
     dirty_refreshed_at: now,
-    last_absorbed_event_id: null,
+    last_absorbed_event_id: latestMainEventId(repo.repoId),
     integration: {
       ...defaultIntegration(),
       last_integrated_sha: repo.head
@@ -247,6 +248,10 @@ function seedInitialPending(session: SessionState): SessionState {
     next = applyEventToSession(session.worktree_path, next, event);
   }
   return next;
+}
+
+function latestMainEventId(repoId: string): string | null {
+  return listMainEvents(repoId).at(-1)?.event_id ?? null;
 }
 
 function withSessionLock<T>(sessionId: string, fn: () => T): T {
