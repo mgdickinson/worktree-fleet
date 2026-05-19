@@ -105,7 +105,30 @@ worktree-fleet uninstall
 
 ## Codex And Other CLIs
 
-Claude gets the native plugin path. Codex currently uses the wrapper path:
+Claude gets the native plugin path. Codex has two pieces:
+
+- the Codex plugin, which gives Codex the fleet-aware skills
+- the `fleet codex` wrapper, which gives CLI Codex heartbeat/session sidecar behavior
+
+Install the Codex plugin marketplace:
+
+```sh
+codex plugin marketplace add mgdickinson/worktree-fleet
+```
+
+Then enable `worktree-fleet-codex` in Codex's plugin UI. If you prefer config, add this to `~/.codex/config.toml`:
+
+```toml
+[plugins."worktree-fleet-codex@worktree-fleet"]
+enabled = true
+```
+
+Restart Codex or start a new session. Codex should then load:
+
+- `worktree-fleet-codex:worktree-fleet`
+- `worktree-fleet-codex:using-git-worktrees`
+
+For CLI Codex, use the wrapper too:
 
 ```sh
 npm install -g @mgdickinson/worktree-fleet
@@ -116,7 +139,7 @@ fleet codex
 
 `fleet codex` runs `codex` if it is on `PATH`, otherwise it falls back to the Codex.app binary at `/Applications/Codex.app/Contents/Resources/codex`. Set `WORKTREE_FLEET_CODEX_BIN=/path/to/codex` if your Codex binary lives somewhere else.
 
-The Codex plugin scaffold is guidance-only until Codex exposes native lifecycle hooks. If you install it in the Codex app, it adds fleet-aware `worktree-fleet` and `using-git-worktrees` skills so worktree creation starts with the fleet board. The wrapper remains the automatic heartbeat/sync path.
+The Codex plugin is guidance-only until Codex exposes native lifecycle hooks. It teaches Codex to use fleet-aware `worktree-fleet` and `using-git-worktrees` skills, but it does not create automatic per-turn hooks. The wrapper remains the automatic heartbeat/sync path.
 
 For any other CLI agent:
 
