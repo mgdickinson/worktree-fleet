@@ -1,0 +1,6 @@
+interface:
+  display_name: "Fleet Git Worktrees"
+  short_description: "Start Git worktree workflows with fleet checks"
+  default_prompt: "Use $using-git-worktrees to create, enter, remove, or land Git worktrees with worktree-fleet safety checks."
+policy:
+  allow_implicit_invocation: true

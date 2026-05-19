@@ -10,6 +10,7 @@ import { syncSession } from "../core/integration.js";
 import { landCurrentWorktree } from "../core/land.js";
 import { listAdapters, readAdapter, registerAdapter, unregisterAdapter } from "../core/adapters.js";
 import { listActivity, logActivity } from "../core/activity.js";
+import { installCodexAgentsInstructions, removeCodexAgentsInstructions } from "../core/agents-instructions.js";
 import { listMainEvents, pruneMainEvents } from "../core/events.js";
 import { installHooks, managedHooksInstalled, uninstallHooks } from "../hooks/install.js";
 import { logHookFailure, mainAdvanced } from "../hooks/main-advanced.js";
@@ -166,6 +167,7 @@ function init(_args: string[]): number {
 
 function uninstall(): number {
   const changed = uninstallHooks(process.cwd());
+  const agents = safe(() => removeCodexAgentsInstructions(process.cwd()));
   const repo = safe(() => getRepoInfo(process.cwd()));
   logActivity({
     kind: "repo-uninstalled",
@@ -178,6 +180,7 @@ function uninstall(): number {
     }
   });
   console.log(changed.length ? `removed fleet hook blocks from ${changed.length} hooks` : "no fleet hook blocks found");
+  if (agents?.changed) console.log(`removed Codex AGENTS.md instructions from ${agents.path}`);
   return 0;
 }
 
@@ -566,6 +569,10 @@ function adapter(args: string[]): number {
   }
   if (subcommand === "uninstall" && kind) {
     const removed = unregisterAdapter(kind);
+    if (kind === "codex") {
+      const agents = safe(() => removeCodexAgentsInstructions(process.cwd()));
+      if (agents?.changed) console.log(`removed Codex AGENTS.md instructions from ${agents.path}`);
+    }
     console.log(removed ? `${kind} adapter registration removed` : `${kind} adapter was not registered`);
     return 0;
   }
@@ -855,8 +862,10 @@ function cyan(value: string): string {
 function installAdapter(kind: string): void {
   if (kind === "codex") {
     const registration = registerAdapter({ kind, mode: "wrapper", packageBin: "fleet", command: "fleet codex", nativeLifecycle: false });
+    const agents = safe(() => installCodexAgentsInstructions(process.cwd()));
     console.log(`${registration.kind}    wrapper available via package bin: use \`${registration.command}\``);
     console.log(`codex    plugin scaffold: worktree-fleet plugin path codex`);
+    if (agents) console.log(`codex    AGENTS.md instructions ${agents.changed ? "installed" : "already present"}: ${agents.path}`);
   } else if (kind === "claude") {
     const registration = registerAdapter({ kind, mode: "host-managed", packageBin: "worktree-fleet", command: null, nativeLifecycle: true });
     console.log(`${registration.kind}   host-managed native lifecycle recorded; CLI core is ready`);

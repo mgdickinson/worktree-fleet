@@ -108,7 +108,18 @@ worktree-fleet uninstall
 Claude gets the native plugin path. Codex has two pieces:
 
 - the Codex plugin, which gives Codex the fleet-aware skills
+- a repo `AGENTS.md` block, which tells native Codex sessions to use fleet before worktree, sync, and land operations
 - the `fleet codex` wrapper, which gives CLI Codex heartbeat/session sidecar behavior
+
+For native Codex, install the package once and stamp the current repo:
+
+```sh
+npm install -g @mgdickinson/worktree-fleet
+cd /path/to/repo
+worktree-fleet setup --adapter codex
+```
+
+`worktree-fleet setup --adapter codex` writes a managed block into the repo's `AGENTS.md`. That gives Codex native app sessions repo-level instructions to check the fleet board before worktree operations, use `worktree-fleet sync` for catch-up, and use `worktree-fleet land` for merging completed work back to local main. Existing `AGENTS.md` content is preserved; `worktree-fleet adapter uninstall codex` removes only the managed block.
 
 Install the Codex plugin marketplace:
 
@@ -131,7 +142,6 @@ Restart Codex or start a new session. Codex should then load:
 For CLI Codex, use the wrapper too:
 
 ```sh
-npm install -g @mgdickinson/worktree-fleet
 cd /path/to/repo
 worktree-fleet setup --adapter codex
 fleet codex
@@ -139,7 +149,7 @@ fleet codex
 
 `fleet codex` runs `codex` if it is on `PATH`, otherwise it falls back to the Codex.app binary at `/Applications/Codex.app/Contents/Resources/codex`. Set `WORKTREE_FLEET_CODEX_BIN=/path/to/codex` if your Codex binary lives somewhere else.
 
-The Codex plugin is guidance-only until Codex exposes native lifecycle hooks. It teaches Codex to use fleet-aware `worktree-fleet` and `using-git-worktrees` skills, but it does not create automatic per-turn hooks. The wrapper remains the automatic heartbeat/sync path.
+The Codex plugin and `AGENTS.md` instructions are guidance-only until Codex exposes native lifecycle hooks. They teach Codex to use fleet-aware workflows, but they do not create automatic per-turn hooks. The wrapper remains the automatic heartbeat/sync path.
 
 For any other CLI agent:
 

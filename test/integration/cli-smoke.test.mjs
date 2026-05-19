@@ -92,6 +92,7 @@ test("setup records explicit adapter consent and exposes the Codex plugin scaffo
   const output = cliRun(["setup", "--yes", "--adapter", "codex"], repo, state);
   assert.match(output, /wrapper available/);
   assert.match(output, /plugin scaffold/);
+  assert.match(output, /AGENTS\.md instructions installed/);
 
   const adapterFile = path.join(state, "adapters", "codex.json");
   const adapter = JSON.parse(fs.readFileSync(adapterFile, "utf8"));
@@ -105,6 +106,15 @@ test("setup records explicit adapter consent and exposes the Codex plugin scaffo
 
   const listOutput = cliRun(["adapter", "list"], repo, state);
   assert.match(listOutput, /codex\s+mode=wrapper/);
+
+  const agents = fs.readFileSync(path.join(repo, "AGENTS.md"), "utf8");
+  assert.match(agents, /worktree-fleet codex instructions/);
+  assert.match(agents, /worktree-fleet status --refresh-current/);
+  assert.match(agents, /worktree-fleet land/);
+
+  const uninstallOutput = cliRun(["adapter", "uninstall", "codex"], repo, state);
+  assert.match(uninstallOutput, /removed Codex AGENTS\.md instructions/);
+  assert.equal(fs.existsSync(path.join(repo, "AGENTS.md")), false);
 });
 
 test("claude hook bootstraps plugin sessions and tool intent", () => {

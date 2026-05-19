@@ -1,11 +1,13 @@
 ---
 name: worktree-fleet
-description: Use when a user asks Codex to set up, sync, inspect, or coordinate worktree-fleet, create or enter Git worktrees, catch up with main, or work in a repo that already uses worktree-fleet.
+description: Use when a user asks Codex to set up, sync, inspect, watch, land, merge back, catch up with main, declare intent, coordinate sibling agents, create or enter Git worktrees, or work in any repo that uses worktree-fleet.
 ---
 
 # worktree-fleet
 
 Use the local `worktree-fleet` CLI as the source of truth for cross-worktree coordination.
+
+If a repo has a worktree-fleet block in `AGENTS.md`, follow it even when another worktree skill also triggers.
 
 ## Workflow
 

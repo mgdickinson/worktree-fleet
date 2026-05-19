@@ -1,11 +1,13 @@
 ---
 name: using-git-worktrees
-description: Use when starting feature work in a Git worktree, creating/opening/removing/pruning worktrees, entering an isolated workspace, coordinating parallel agents, or before raw git worktree commands in a repo that uses worktree-fleet.
+description: Use when starting feature work in a Git worktree, creating/opening/removing/pruning worktrees, entering an isolated workspace, coordinating parallel agents, landing or merging work back, or before raw git worktree commands in a repo that uses worktree-fleet.
 ---
 
 # Fleet-Aware Git Worktrees
 
 In a worktree-fleet-managed repo, `worktree-fleet` is the coordination layer. Use it before generic Git worktree guidance so sibling sessions, dirty snapshots, pending main updates, and blocked sync state stay visible.
+
+If `AGENTS.md` contains a worktree-fleet managed block, those rules supersede generic worktree instructions.
 
 ## Required Flow
 

@@ -1,0 +1,6 @@
+interface:
+  display_name: "worktree-fleet"
+  short_description: "Use fleet status, sync, land, and intent commands"
+  default_prompt: "Use $worktree-fleet to inspect fleet status, sync safely, land completed work, or declare edit intent."
+policy:
+  allow_implicit_invocation: true
