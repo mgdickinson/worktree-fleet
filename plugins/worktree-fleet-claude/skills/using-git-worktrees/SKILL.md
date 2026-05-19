@@ -22,3 +22,5 @@ Then:
 5. If the user named files or areas of work, declare intent with `worktree-fleet intent declare <path...>`.
 
 If a fleet hook blocks the raw Git command, follow the hook message, read the fleet board, and retry only the operation that still makes sense.
+
+When the user wants to land completed work back onto the local integration branch, run `worktree-fleet land` from the completed worktree instead of manually switching branches and merging.

@@ -59,6 +59,14 @@ When you want to force the current worktree to catch up:
 worktree-fleet sync
 ```
 
+When a feature worktree is ready to land onto local main:
+
+```sh
+worktree-fleet land
+```
+
+`land` syncs first, requires clean current and integration worktrees, fast-forwards the local integration branch, and records the main-advance event for sibling sessions.
+
 When you want the local audit trail, including Claude monitor starts, stops, and sidecar errors:
 
 ```sh
@@ -108,6 +116,8 @@ fleet codex
 
 `fleet codex` runs `codex` if it is on `PATH`, otherwise it falls back to the Codex.app binary at `/Applications/Codex.app/Contents/Resources/codex`. Set `WORKTREE_FLEET_CODEX_BIN=/path/to/codex` if your Codex binary lives somewhere else.
 
+The Codex plugin scaffold is guidance-only until Codex exposes native lifecycle hooks. If you install it in the Codex app, it adds fleet-aware `worktree-fleet` and `using-git-worktrees` skills so worktree creation starts with the fleet board. The wrapper remains the automatic heartbeat/sync path.
+
 For any other CLI agent:
 
 ```sh
@@ -123,6 +133,7 @@ worktree-fleet status [--refresh-current]
 worktree-fleet watch [--interval 2] [--once] [--no-refresh-current]
 worktree-fleet activity [--limit 30] [--all] [--json]
 worktree-fleet sync
+worktree-fleet land
 worktree-fleet intent declare <path...>
 worktree-fleet intent release <path...>
 worktree-fleet adapter list
@@ -136,6 +147,7 @@ fleet codex [-- <codex args...>]
 - Main-update events carry exact commit SHAs.
 - Repo identity is local and object-store based.
 - Integration blocks on active Git operations, staged changes, dirty overlap, missing target objects, and divergent main targets.
+- Landing blocks unless the current worktree and local integration worktree are clean and the integration branch can fast-forward to the current HEAD.
 - No stash, autostash, hidden branches, or shared mutable Git scratch state.
 - Activity artifacts are local only: `~/.worktree-fleet/activity/*.jsonl`.
 

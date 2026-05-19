@@ -151,6 +151,20 @@ test("claude hook bootstraps plugin sessions and tool intent", () => {
   assert.equal(unrelatedPrompt.status, 0, unrelatedPrompt.stderr);
   assert.equal(unrelatedPrompt.stdout, "");
 
+  const landPrompt = spawnSync("node", [cli, "claude-hook"], {
+    cwd: repo,
+    input: JSON.stringify({
+      hook_event_name: "UserPromptSubmit",
+      cwd: repo,
+      prompt: "land this worktree back into main"
+    }),
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(landPrompt.status, 0, landPrompt.stderr);
+  const landPromptOutput = JSON.parse(landPrompt.stdout);
+  assert.match(landPromptOutput.hookSpecificOutput.additionalContext, /worktree-fleet land/);
+
   const adapter = JSON.parse(fs.readFileSync(path.join(state, "adapters", "claude.json"), "utf8"));
   assert.equal(adapter.mode, "native");
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
@@ -329,6 +343,21 @@ test("watch renders a one-shot fleet dashboard", () => {
   assert.match(output, /local\.txt/);
 });
 
+test("watch keeps one-shot CLI worktree snapshots until heartbeat expiry", () => {
+  const { repo, state, tmp } = makeTempRepo();
+  const wt = path.join(tmp, "wt");
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+  run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
+
+  cliRun(["status", "--refresh-current"], repo, state);
+  cliRun(["status", "--refresh-current"], wt, state);
+
+  const output = cliRun(["watch", "--once", "--no-refresh-current"], repo, state);
+  assert.match(output, /sessions=2/);
+  assert.match(output, /feature/);
+  assert.match(output, new RegExp(escapeRegExp(wt)));
+});
+
 test("activity records durable usage artifacts", () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
@@ -360,6 +389,70 @@ test("sync merges a clean main event into a sibling worktree", () => {
   const output = cliRun(["sync"], wt, state);
   assert.match(output, /merged/);
   assert.equal(run("git", ["rev-parse", "HEAD"], wt), run("git", ["rev-parse", "HEAD"], repo));
+});
+
+test("land fast-forwards the local integration worktree and emits a main event", () => {
+  const { repo, state, tmp } = makeTempRepo();
+  const wt = path.join(tmp, "wt");
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+  run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
+
+  fs.appendFileSync(path.join(wt, "file.txt"), "feature\n");
+  run("git", ["add", "file.txt"], wt);
+  run("git", ["commit", "-q", "-m", "feature"], wt);
+  const featureHead = run("git", ["rev-parse", "HEAD"], wt).trim();
+
+  const output = cliRun(["land"], wt, state);
+
+  assert.match(output, /landed feature/);
+  assert.equal(run("git", ["rev-parse", "HEAD"], repo).trim(), featureHead);
+  assert.equal(run("git", ["status", "--short"], repo), "");
+  const events = fs.readdirSync(path.join(state, "bus", "main-events"));
+  assert.equal(events.length, 1);
+  const event = JSON.parse(fs.readFileSync(path.join(state, "bus", "main-events", events[0]), "utf8"));
+  assert.equal(event.ref, "main");
+  assert.equal(event.sha, featureHead);
+  assert.match(cliRun(["activity", "--all", "--limit", "5"], wt, state), /landed feature onto main/);
+});
+
+test("land refuses unsafe worktrees", () => {
+  const { repo, state, tmp } = makeTempRepo();
+  const wt = path.join(tmp, "wt");
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+
+  const fromMain = spawnSync("node", [cli, "land"], {
+    cwd: repo,
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(fromMain.status, 1);
+  assert.match(fromMain.stdout, /already on integration branch main/);
+
+  run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
+  fs.appendFileSync(path.join(wt, "file.txt"), "feature\n");
+  run("git", ["add", "file.txt"], wt);
+  run("git", ["commit", "-q", "-m", "feature"], wt);
+  const featureHead = run("git", ["rev-parse", "HEAD"], wt).trim();
+
+  fs.writeFileSync(path.join(wt, "dirty.txt"), "dirty\n");
+  const dirtyFeature = spawnSync("node", [cli, "land"], {
+    cwd: wt,
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(dirtyFeature.status, 1);
+  assert.match(dirtyFeature.stdout, /current worktree has uncommitted changes/);
+  fs.unlinkSync(path.join(wt, "dirty.txt"));
+
+  fs.writeFileSync(path.join(repo, "main-dirty.txt"), "dirty\n");
+  const dirtyMain = spawnSync("node", [cli, "land"], {
+    cwd: wt,
+    env: { ...process.env, WORKTREE_FLEET_HOME: state },
+    encoding: "utf8"
+  });
+  assert.equal(dirtyMain.status, 1);
+  assert.match(dirtyMain.stdout, /integration worktree has uncommitted changes/);
+  assert.notEqual(run("git", ["rev-parse", "HEAD"], repo).trim(), featureHead);
 });
 
 test("sync records an event cursor after absorbing main events", () => {

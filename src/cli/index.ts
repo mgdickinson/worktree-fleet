@@ -7,6 +7,7 @@ import { ensureStateRoot } from "../core/init.js";
 import { stateRoot } from "../core/paths.js";
 import { ensureIntent, ensureSession, findSessionForWorktree, isSessionLockTimeoutError, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
 import { syncSession } from "../core/integration.js";
+import { landCurrentWorktree } from "../core/land.js";
 import { listAdapters, readAdapter, registerAdapter, unregisterAdapter } from "../core/adapters.js";
 import { listActivity, logActivity } from "../core/activity.js";
 import { listMainEvents, pruneMainEvents } from "../core/events.js";
@@ -46,6 +47,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return activity(rest);
       case "sync":
         return sync();
+      case "land":
+        return land();
       case "session":
         return session(rest);
       case "sidecar":
@@ -90,6 +93,7 @@ Usage:
   worktree-fleet watch [--interval <seconds>] [--once] [--no-refresh-current]
   worktree-fleet activity [--limit <n>] [--all] [--json]
   worktree-fleet sync
+  worktree-fleet land
   worktree-fleet gc [--days <n>]
   worktree-fleet claude-hook
   worktree-fleet intent declare <path...>
@@ -309,6 +313,14 @@ function sync(): number {
   const result = syncSession(session);
   console.log(result.message);
   return result.status === "error" ? 1 : 0;
+}
+
+function land(): number {
+  ensureStateRoot();
+  sweepStaleSessions();
+  const result = landCurrentWorktree(process.cwd());
+  console.log(result.message);
+  return result.status === "landed" ? 0 : 1;
 }
 
 async function session(args: string[]): Promise<number> {
@@ -901,6 +913,7 @@ function claudeSessionContext(branch: string): string {
     "- In fleet-managed repos, worktree-fleet supersedes generic Git worktree guidance, including `superpowers:using-git-worktrees`; apply the fleet board/status check first even if another worktree skill is loaded.",
     "- Do not start with raw `git worktree add/remove/move/prune/repair` or `git branch -d/-D`. First use `worktree-fleet:worktree` or run `worktree-fleet status --refresh-current` and read the fleet board.",
     "- For catch-up with the integration branch, load/use `worktree-fleet:sync` before any `git pull`, `git merge main`, or `git rebase main` flow.",
+    "- For landing completed work back onto the local integration branch, run `worktree-fleet land` from the completed worktree instead of manually switching to main and merging.",
     "- If a fleet hook blocks a Bash command, follow the hook message instead of bypassing it.",
     "</worktree-fleet>"
   ].join("\n");
@@ -918,7 +931,9 @@ function shouldInjectFleetWorktreePromptContext(prompt: string): boolean {
     /\bparallel (agent|session|worktree|work tree)s?\b/,
     /\bcreate .{0,40}(workspace|worktree|work tree)\b/,
     /\bremove .{0,40}(worktree|work tree)\b/,
-    /\bprune .{0,40}(worktree|work tree)\b/
+    /\bprune .{0,40}(worktree|work tree)\b/,
+    /\bland .{0,60}(worktree|branch|work)\b/,
+    /\bmerge .{0,60}(back|into main|to main|onto main)\b/
   ].some((pattern) => pattern.test(normalized));
 }
 
@@ -931,6 +946,7 @@ function claudeWorktreePromptContext(branch: string): string {
     "- This supersedes generic Git worktree workflows, including `superpowers:using-git-worktrees`, for this repo.",
     "- Start with `worktree-fleet status --refresh-current` and read the fleet board before raw `git worktree` mutations.",
     "- After creating or entering a worktree, run `worktree-fleet status --refresh-current` inside it; if pending is visible, run `worktree-fleet sync` before editing.",
+    "- To land completed work, run `worktree-fleet land` from the completed worktree; do not manually switch to main and merge first.",
     "</worktree-fleet-prompt>"
   ].join("\n");
 }

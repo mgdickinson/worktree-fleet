@@ -1,6 +1,6 @@
 ---
 name: worktree-fleet
-description: Use when a user asks Codex to set up, sync, inspect, or coordinate worktree-fleet across Git worktrees, or when working in a repo that already uses worktree-fleet.
+description: Use when a user asks Codex to set up, sync, inspect, or coordinate worktree-fleet, create or enter Git worktrees, catch up with main, or work in a repo that already uses worktree-fleet.
 ---
 
 # worktree-fleet
@@ -27,10 +27,22 @@ worktree-fleet status --refresh-current
 worktree-fleet sync
 ```
 
-4. If the user names files they plan to edit, publish intent:
+4. When the user asks to land completed work back onto the local integration branch, run:
+
+```sh
+worktree-fleet land
+```
+
+5. If the user names files they plan to edit, publish intent:
 
 ```sh
 worktree-fleet intent declare <path...>
+```
+
+6. Before creating, removing, pruning, or entering Git worktrees, also use the `using-git-worktrees` skill from this plugin and start with:
+
+```sh
+worktree-fleet status --refresh-current
 ```
 
 Release intent after the work is no longer active:

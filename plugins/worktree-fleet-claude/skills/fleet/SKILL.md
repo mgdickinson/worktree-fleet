@@ -31,6 +31,14 @@ worktree-fleet sync
 
 Do this before any manual `git pull`, `git merge main`, or `git rebase main` flow. If fleet blocks, surface that block instead of bypassing it with Git.
 
+When the task involves landing a completed worktree back onto the local integration branch, use:
+
+```sh
+worktree-fleet land
+```
+
+Do this instead of manually switching to `main` and merging the feature branch. Fleet landing requires clean worktrees, fast-forwards the local integration branch, and records the main-advance event.
+
 When creating or switching worktrees, keep fleet visible:
 
 1. Check `worktree-fleet status --refresh-current` before changing worktrees.

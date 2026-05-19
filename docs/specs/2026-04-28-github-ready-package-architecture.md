@@ -301,7 +301,7 @@ Adapter registration is an explicit-consent record. It is not proof that a host-
 
 `repo_id` is `sha256(realpath(git rev-parse --git-common-dir))`. Fleet state is per-machine and per shared object store. The origin URL may be stored as remote metadata, but it is not the local event identity because local main events can point at objects that only exist in one clone. If cross-machine coordination becomes a future goal, add a separate `remote_id`; do not overload `repo_id`.
 
-`heartbeat_at` is a liveness signal, not just display data. A session is stale when its PID is gone, or when `heartbeat_at` is older than the configured stale threshold. The default stale heartbeat threshold is 5 minutes. PID checks are best-effort because containers, SSH sessions, and PID reuse can make them unreliable.
+`heartbeat_at` is a liveness signal, not just display data. A session is stale when `heartbeat_at` is older than the configured stale threshold. The default stale heartbeat threshold is 5 minutes. PID is useful for diagnostics and lock recovery, but dead-PID session sweeps are intentionally avoided so one-shot CLI snapshots remain visible until their heartbeat expires.
 
 Intent file:
 
@@ -827,6 +827,19 @@ Runs `turn_stop` for the current session. If no session exists, either:
 
 For personal usage, creating a generic session is friendlier.
 
+### `worktree-fleet land`
+
+Safely lands the current non-integration worktree onto the local integration branch. It should:
+
+- create or refresh the current generic session
+- run the same safe sync path first
+- refuse detached HEAD or running from the integration branch
+- refuse dirty current worktree, dirty integration worktree, or active Git operations
+- require the integration branch to be an ancestor of the current HEAD
+- fast-forward the local integration worktree to the current HEAD
+- emit or idempotently confirm the local main-advance event so siblings see the new target
+- record a durable `landed` activity event
+
 ### `worktree-fleet adapter install|uninstall|list`
 
 Records explicit adapter consent in `~/.worktree-fleet/adapters/<kind>.json`.
@@ -985,7 +998,7 @@ Required scenarios:
 - fetch lease allows only one fetch per repo interval
 - stale `fetch.lock` with an expired dead owner is recovered
 - deleted event files do not lose active pending state
-- stale heartbeat or dead-PID session is swept
+- stale-heartbeat session is swept
 - existing Git hooks are preserved during install/uninstall
 - installed Git hooks use an absolute `worktree-fleet` binary path and log nonblocking failures
 - package exposes both `worktree-fleet` and `fleet` bins

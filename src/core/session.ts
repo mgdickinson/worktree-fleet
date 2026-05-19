@@ -204,14 +204,8 @@ export function sweepStaleSessions(staleMs = 5 * 60 * 1000): number {
   for (const session of listSessions()) {
     const heartbeatAge = Date.now() - Date.parse(session.heartbeat_at);
     const staleHeartbeat = Number.isNaN(heartbeatAge) || heartbeatAge > staleMs;
-    let pidDead = false;
-    try {
-      process.kill(session.pid, 0);
-    } catch {
-      pidDead = true;
-    }
 
-    if (pidDead || staleHeartbeat) {
+    if (staleHeartbeat) {
       try {
         fs.unlinkSync(sessionPath(session.session_id));
       } catch {
