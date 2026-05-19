@@ -18,28 +18,47 @@ export interface SidecarController {
 
 export function startSidecar(session: SessionState): SidecarController {
   let stopped = false;
+  let stopReason = "stop requested";
   let current = session;
   const abort = new AbortController();
   const tickMs = Number(process.env.WORKTREE_FLEET_TICK_MS ?? DEFAULT_SIDECAR_TICK_MS);
 
   const done = (async () => {
-    while (!stopped) {
-      const latest = readSession(current.session_id);
-      if (!latest) return;
-      current = latest;
-      try {
-        current = heartbeat(current);
-        current = absorbRepoEvents(current);
-        current = refreshSessionDirty(current);
-        runFetchTick(current);
-      } catch {
-        // Sidecar should never kill the wrapped agent.
+    logSidecarActivity(current, "sidecar-started", `sidecar started for ${current.agent_kind}`);
+    try {
+      while (!stopped) {
+        const latest = readSession(current.session_id);
+        if (!latest) {
+          stopReason = "session missing";
+          return;
+        }
+        current = latest;
+        try {
+          current = heartbeat(current);
+          current = absorbRepoEvents(current);
+          current = refreshSessionDirty(current);
+          runFetchTick(current);
+        } catch (error) {
+          logSidecarActivity(current, "sidecar-error", sidecarErrorSummary(error), {
+            error: serializeError(error)
+          });
+          // Sidecar should never kill the wrapped agent.
+        }
+        try {
+          await delay(tickMs, undefined, { signal: abort.signal });
+        } catch (error) {
+          if (abort.signal.aborted) return;
+          stopReason = "delay failed";
+          logSidecarActivity(current, "sidecar-error", sidecarErrorSummary(error), {
+            error: serializeError(error)
+          });
+          return;
+        }
       }
-      try {
-        await delay(tickMs, undefined, { signal: abort.signal });
-      } catch {
-        return;
-      }
+    } finally {
+      logSidecarActivity(current, "sidecar-stopped", `sidecar stopped: ${stopReason}`, {
+        reason: stopReason
+      });
     }
   })();
 
@@ -49,6 +68,48 @@ export function startSidecar(session: SessionState): SidecarController {
       abort.abort();
     },
     done
+  };
+}
+
+function logSidecarActivity(
+  session: SessionState,
+  kind: "sidecar-started" | "sidecar-error" | "sidecar-stopped",
+  summary: string,
+  details: Record<string, unknown> = {}
+): void {
+  try {
+    logActivity({
+      kind,
+      summary,
+      repoId: session.repo_id,
+      sessionId: session.session_id,
+      worktreePath: session.worktree_path,
+      details: {
+        agent_kind: session.agent_kind,
+        branch: session.branch,
+        ...details
+      }
+    });
+  } catch {
+    // Logging must never become the reason a sidecar disrupts an agent.
+  }
+}
+
+function sidecarErrorSummary(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return `sidecar tick failed: ${message}`;
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+  return {
+    message: String(error)
   };
 }
 

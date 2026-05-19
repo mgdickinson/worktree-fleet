@@ -15,10 +15,10 @@ For a live board, run:
 worktree-fleet watch
 ```
 
-For a durable usage trail, run:
+For a durable usage trail, including Claude monitor starts, stops, and sidecar errors, run:
 
 ```sh
-worktree-fleet activity
+worktree-fleet activity --all --limit 50
 ```
 
 Use the output as the fleet board. Call out pending main targets, divergent targets, blocked reasons, dirty files, upcoming intent, contention, and recent main events. If no sessions appear, run `worktree-fleet doctor` and report the actionable fix.

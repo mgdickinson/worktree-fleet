@@ -59,6 +59,12 @@ When you want to force the current worktree to catch up:
 worktree-fleet sync
 ```
 
+When you want the local audit trail, including Claude monitor starts, stops, and sidecar errors:
+
+```sh
+worktree-fleet activity --all --limit 50
+```
+
 ## Why This Exists
 
 Claude is great at running multiple focused worktree sessions. Git is great at letting those worktrees drift apart while nobody notices.
@@ -80,6 +86,8 @@ State lives under:
 ```
 
 The Claude plugin installs managed blocks into the repo's Git hooks. Existing hook content is preserved. Hook failures are logged and do not block normal Git commands.
+
+Claude monitor and sidecar diagnostics are recorded in `~/.worktree-fleet/activity/*.jsonl` as `sidecar-started`, `sidecar-error`, and `sidecar-stopped` events.
 
 Remove fleet-managed hooks and local adapter registration with:
 

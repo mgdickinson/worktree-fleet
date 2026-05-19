@@ -12,4 +12,4 @@ Run:
 worktree-fleet activity $ARGUMENTS
 ```
 
-Summarize recent fleet usage artifacts: session starts, sync results, blocked states, intent changes, hook events, and main-advance activity.
+Summarize recent fleet usage artifacts: session starts, sync results, blocked states, intent changes, hook events, sidecar monitor starts/stops/errors, and main-advance activity.

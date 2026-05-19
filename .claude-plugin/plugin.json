@@ -1,7 +1,7 @@
 {
   "name": "worktree-fleet",
   "description": "Coordinate Claude Code, Codex, and generic CLI agents across sibling Git worktrees.",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "author": {
     "name": "worktree-fleet"
   },
@@ -9,5 +9,7 @@
   "keywords": ["git", "worktree", "coordination", "claude-code", "codex"],
   "skills": "./plugins/worktree-fleet-claude/skills/",
   "hooks": "./plugins/worktree-fleet-claude/hooks/hooks.json",
-  "monitors": "./plugins/worktree-fleet-claude/monitors/monitors.json"
+  "experimental": {
+    "monitors": "./plugins/worktree-fleet-claude/monitors/monitors.json"
+  }
 }

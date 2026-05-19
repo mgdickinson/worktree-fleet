@@ -457,6 +457,43 @@ test("sidecar fetch tick publishes remote integration branch events", () => {
   assert.ok(events.some((event) => event.source === "remote-main" && event.ref === "origin/main"));
 });
 
+test("sidecar records lifecycle and tick errors in activity", async () => {
+  const { repo, state, tmp } = makeTempRepo();
+  cliRun(["status", "--refresh-current"], repo, state);
+  const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+  assert.ok(sessionFile);
+  const sessionPath = path.join(state, "sessions", sessionFile);
+  const session = JSON.parse(fs.readFileSync(sessionPath, "utf8"));
+  session.worktree_path = path.join(tmp, "missing-worktree");
+
+  await withState(state, async () => {
+    const previousTick = process.env.WORKTREE_FLEET_TICK_MS;
+    process.env.WORKTREE_FLEET_TICK_MS = "20";
+    try {
+      const { writeSession } = await import(path.join(root, "dist/core/session.js"));
+      const { startSidecar } = await import(path.join(root, "dist/sidecar/run.js"));
+      writeSession(session);
+      const controller = startSidecar(session);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      controller.stop();
+      await controller.done;
+    } finally {
+      if (previousTick === undefined) delete process.env.WORKTREE_FLEET_TICK_MS;
+      else process.env.WORKTREE_FLEET_TICK_MS = previousTick;
+    }
+  });
+
+  const activityLines = fs.readdirSync(path.join(state, "activity"))
+    .flatMap((file) => fs.readFileSync(path.join(state, "activity", file), "utf8").trim().split("\n").filter(Boolean))
+    .map((line) => JSON.parse(line));
+  assert.ok(activityLines.some((event) => event.kind === "sidecar-started"));
+  const errorEvent = activityLines.find((event) => event.kind === "sidecar-error");
+  assert.ok(errorEvent);
+  assert.match(errorEvent.summary, /sidecar tick failed/);
+  assert.ok(errorEvent.details.error.message);
+  assert.ok(activityLines.some((event) => event.kind === "sidecar-stopped"));
+});
+
 test("sync blocks when the index has staged changes", () => {
   const { repo, state, tmp } = makeTempRepo();
   const wt = path.join(tmp, "wt");
