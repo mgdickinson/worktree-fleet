@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
@@ -366,6 +367,79 @@ test("watch keeps one-shot CLI worktree snapshots until heartbeat expiry", () =>
   assert.match(output, /sessions=2/);
   assert.match(output, /feature/);
   assert.match(output, new RegExp(escapeRegExp(wt)));
+});
+
+test("observe serves a live product dashboard and snapshot API", async () => {
+  const { repo, state } = makeTempRepo();
+  cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
+  cliRun(["status", "--refresh-current"], repo, state);
+  fs.writeFileSync(path.join(repo, "local.txt"), "local\n");
+
+  const port = await openPort();
+  const child = spawn("node", [cli, "observe", "--host", "127.0.0.1", "--port", String(port), "--no-open", "--interval", "1"], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      WORKTREE_FLEET_HOME: state
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  try {
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await waitForHttp(`${baseUrl}/api/snapshot`);
+    const snapshot = await fetchJson(`${baseUrl}/api/snapshot`);
+    assert.equal(snapshot.repo.root, fs.realpathSync.native(repo));
+    assert.equal(snapshot.working.observing, true);
+    assert.ok(snapshot.summary.next_action);
+    assert.ok(snapshot.checks.some((check) => check.id === "hooks" && check.status === "ok"));
+    assert.ok(snapshot.checks.some((check) => check.id === "current-session" && check.status === "ok"));
+    assert.ok(snapshot.sessions.some((session) => session.dirty_files.includes("local.txt")));
+
+    const html = await fetchText(`${baseUrl}/`);
+    assert.match(html, /Fleet Observer/);
+    assert.match(html, /Working Status/);
+    assert.match(html, /Agent Health/);
+    assert.match(html, /Coordination Health/);
+    assert.match(html, /Activity Feed/);
+  } finally {
+    child.kill("SIGTERM");
+    await onceExit(child);
+  }
+});
+
+test("observe snapshot makes dead registered agents obvious", async () => {
+  const { repo, state } = makeTempRepo();
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+  cliRun(["status", "--refresh-current"], repo, state);
+
+  const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+  assert.ok(sessionFile);
+  const sessionPath = path.join(state, "sessions", sessionFile);
+  const session = JSON.parse(fs.readFileSync(sessionPath, "utf8"));
+  session.pid = 99999999;
+  fs.writeFileSync(sessionPath, JSON.stringify(session, null, 2));
+
+  const port = await openPort();
+  const child = spawn("node", [cli, "observe", "--host", "127.0.0.1", "--port", String(port), "--no-open", "--interval", "1"], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      WORKTREE_FLEET_HOME: state
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  try {
+    const snapshot = await waitForSnapshot(`http://127.0.0.1:${port}/api/snapshot`, (candidate) =>
+      candidate.sessions.some((entry) => entry.lifecycle.status === "offline")
+    );
+    assert.ok(snapshot.summary.next_action.includes("not running"));
+    assert.ok(snapshot.checks.some((check) => check.id === "agent-health" && check.status === "bad"));
+  } finally {
+    child.kill("SIGTERM");
+    await onceExit(child);
+  }
 });
 
 test("activity records durable usage artifacts", () => {
@@ -807,6 +881,57 @@ function findRepoConfig(state) {
   const repoId = fs.readdirSync(reposDir)[0];
   assert.ok(repoId);
   return path.join(reposDir, repoId, "config.json");
+}
+
+function openPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      server.close(() => {
+        if (!address || typeof address === "string") reject(new Error("no port assigned"));
+        else resolve(address.port);
+      });
+    });
+    server.on("error", reject);
+  });
+}
+
+async function waitForHttp(url) {
+  await waitForSnapshot(url, () => true);
+}
+
+async function waitForSnapshot(url, predicate) {
+  const deadline = Date.now() + 5000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const snapshot = await fetchJson(url);
+      if (predicate(snapshot)) return snapshot;
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw lastError ?? new Error(`timed out waiting for ${url}`);
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url);
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
+async function fetchText(url) {
+  const response = await fetch(url);
+  assert.equal(response.status, 200);
+  return response.text();
+}
+
+function onceExit(child) {
+  return new Promise((resolve) => {
+    child.once("exit", resolve);
+  });
 }
 
 async function withState(state, fn) {

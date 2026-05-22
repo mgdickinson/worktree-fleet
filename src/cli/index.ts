@@ -20,6 +20,7 @@ import { startSidecar } from "../sidecar/run.js";
 import { ensureRepoConfig } from "../core/repo-config.js";
 import { readJsonFile } from "../core/fs.js";
 import { lastFetchPath } from "../core/paths.js";
+import { openBrowser, startObserveServer } from "../observe/server.js";
 import type { IntentState, SessionState } from "../core/types.js";
 
 const FLEET_WORKTREE_CHECK_TTL_MS = 10 * 60 * 1000;
@@ -44,6 +45,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         return status(rest);
       case "watch":
         return watch(rest);
+      case "observe":
+        return observe(rest);
       case "activity":
         return activity(rest);
       case "sync":
@@ -91,7 +94,8 @@ Usage:
   worktree-fleet setup [--yes] [--no-adapters|--adapter <kind>|--all-adapters]
   worktree-fleet init
   worktree-fleet status [--refresh-current]
-  worktree-fleet watch [--interval <seconds>] [--once] [--no-refresh-current]
+  worktree-fleet watch [--interval <seconds>] [--once] [--web] [--no-refresh-current]
+  worktree-fleet observe [--host <host>] [--port <port>] [--interval <seconds>] [--no-open] [--no-refresh-current]
   worktree-fleet activity [--limit <n>] [--all] [--json]
   worktree-fleet sync
   worktree-fleet land
@@ -278,6 +282,9 @@ function activity(args: string[]): number {
 }
 
 async function watch(args: string[]): Promise<number> {
+  if (args.includes("--web")) {
+    return observe(args.filter((arg) => arg !== "--web" && arg !== "--once"));
+  }
   ensureStateRoot();
   const once = args.includes("--once");
   const noRefreshCurrent = args.includes("--no-refresh-current");
@@ -306,6 +313,46 @@ async function watch(args: string[]): Promise<number> {
   } while (!stopped);
 
   if (!once && process.stdout.isTTY) process.stdout.write("\n");
+  return 0;
+}
+
+async function observe(args: string[]): Promise<number> {
+  ensureStateRoot();
+  const noRefreshCurrent = args.includes("--no-refresh-current");
+  const noOpen = args.includes("--no-open");
+  const host = readStringFlag(args, "--host") ?? "127.0.0.1";
+  const port = readNumberFlag(args, "--port") ?? 0;
+  const intervalSeconds = readNumberFlag(args, "--interval") ?? 2;
+  if (!Number.isFinite(port) || port < 0 || port > 65535) {
+    console.error("usage: worktree-fleet observe [--host <host>] [--port <port>] [--interval <positive-seconds>] [--no-open] [--no-refresh-current]");
+    return 2;
+  }
+  if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
+    console.error("usage: worktree-fleet observe [--host <host>] [--port <port>] [--interval <positive-seconds>] [--no-open] [--no-refresh-current]");
+    return 2;
+  }
+
+  const server = await startObserveServer({
+    cwd: process.cwd(),
+    host,
+    port,
+    intervalSeconds,
+    refreshCurrent: !noRefreshCurrent
+  });
+  console.log(`worktree-fleet observe ${server.url}`);
+  console.log("press Ctrl-C to stop");
+  if (!noOpen) openBrowser(server.url);
+
+  let closing = false;
+  await new Promise<void>((resolve) => {
+    const stop = () => {
+      if (closing) return;
+      closing = true;
+      server.close().then(resolve, () => resolve());
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  });
   return 0;
 }
 
@@ -891,6 +938,18 @@ function parseAdapterFlags(args: string[]): { adapters: string[]; allAdapters: b
     }
   }
   return { adapters, allAdapters, noAdapters };
+}
+
+function readStringFlag(args: string[], flag: string): string | null {
+  const index = args.indexOf(flag);
+  if (index < 0) return null;
+  return args[index + 1] ?? null;
+}
+
+function readNumberFlag(args: string[], flag: string): number | null {
+  const value = readStringFlag(args, flag);
+  if (value === null) return null;
+  return Number(value);
 }
 
 function enableRerere(): void {

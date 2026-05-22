@@ -32,20 +32,28 @@ If Claude tries to mutate worktrees with raw Git, the plugin makes it check the 
 - Pending integration-branch updates
 - Safe automatic catch-up when possible
 - Clear blocked states when sync would be risky
-- A live dashboard with `worktree-fleet watch`
+- A live observer with `worktree-fleet observe`
 - Local activity logs so you can see what happened later
 
 Most days, you do not need to touch the CLI. The plugin is the point.
 
 ## The Nice Button
 
-When you want to see the fleet:
+When you want to see whether fleet is actually working:
+
+```sh
+worktree-fleet observe
+```
+
+It opens a local dashboard with working status, agent heartbeat health, process liveness, safety hook status, pending catch-ups, sync blocks, divergent main targets, path contention, recent main events, and the local activity feed.
+
+When you want the terminal version:
 
 ```sh
 worktree-fleet watch
 ```
 
-It shows sessions, worktrees, dirty files, intents, pending updates, blocked reasons, divergent targets, and recent activity.
+It shows sessions, worktrees, dirty files, intents, pending updates, blocked reasons, divergent targets, and recent activity in a compact terminal frame. Use `worktree-fleet watch --web` to launch the local observer from the watch command.
 
 When you want a one-shot health check:
 
@@ -163,7 +171,8 @@ worktree-fleet session start --agent generic-cli -- <command...>
 worktree-fleet setup [--adapter claude|codex|generic-cli] [--no-adapters]
 worktree-fleet init
 worktree-fleet status [--refresh-current]
-worktree-fleet watch [--interval 2] [--once] [--no-refresh-current]
+worktree-fleet observe [--host 127.0.0.1] [--port 0] [--interval 2] [--no-open] [--no-refresh-current]
+worktree-fleet watch [--interval 2] [--once] [--web] [--no-refresh-current]
 worktree-fleet activity [--limit 30] [--all] [--json]
 worktree-fleet sync
 worktree-fleet land
