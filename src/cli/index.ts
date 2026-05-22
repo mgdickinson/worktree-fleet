@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensureStateRoot } from "../core/init.js";
 import { stateRoot } from "../core/paths.js";
-import { ensureIntent, ensureSession, findSessionForWorktree, isSessionLockTimeoutError, listIntents, listSessions, markSessionEnded, readSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
+import { ensureIntent, ensureSession, findSessionForWorktree, isSessionLockTimeoutError, listIntents, listSessions, markSessionEnded, readSession, refreshExistingSession, refreshSessionDirty, sweepStaleSessions, updateIntent, writeSession } from "../core/session.js";
 import { syncSession } from "../core/integration.js";
 import { landCurrentWorktree } from "../core/land.js";
 import { listAdapters, readAdapter, registerAdapter, unregisterAdapter } from "../core/adapters.js";
@@ -216,8 +216,7 @@ function status(args: string[]): number {
   ensureStateRoot();
   sweepStaleSessions();
   if (args.includes("--refresh-current")) {
-    const current = ensureSession(process.cwd());
-    refreshSessionDirty(current);
+    refreshExistingSession(process.cwd());
   }
 
   const intents = new Map(listIntents().map((intentState) => [intentState.session_id, intentState]));
@@ -565,7 +564,11 @@ function claudeHookUnsafe(): number {
 
 function intent(args: string[]): number {
   const [subcommand, ...paths] = args;
-  const session = ensureSession(process.cwd());
+  const session = findSessionForWorktree(process.cwd());
+  if (!session) {
+    console.error("no active fleet session for this worktree; start the agent under fleet before declaring planned work");
+    return 1;
+  }
   if (subcommand === "declare") {
     updateIntent(session.session_id, (intentState) => ({
       ...intentState,
@@ -678,7 +681,7 @@ function renderWatchFrame(options: WatchRenderOptions): string {
   sweepStaleSessions();
   const repo = safe(() => getRepoInfo(process.cwd()));
   if (repo && options.refreshCurrent) {
-    refreshSessionDirty(ensureSession(repo.root));
+    refreshExistingSession(repo.root);
   }
 
   const repoConfig = repo ? safe(() => ensureRepoConfig(repo.root)) : null;

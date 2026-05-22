@@ -4,7 +4,7 @@ import { listMainEvents } from "./events.js";
 import { ensureStateRoot } from "./init.js";
 import { stateRoot } from "./paths.js";
 import { ensureRepoConfig } from "./repo-config.js";
-import { ensureSession, listIntents, listSessions, refreshSessionDirty } from "./session.js";
+import { listIntents, listSessions, refreshExistingSession, sweepStaleSessions } from "./session.js";
 import type { ActivityEvent, AdapterRegistration, IntentState, MainEvent, PendingTarget, SessionState } from "./types.js";
 import { getRepoInfo } from "../git/repo.js";
 import { managedHooksInstalled } from "../hooks/install.js";
@@ -164,12 +164,13 @@ interface WatchSessionEntry {
 
 export function buildFleetSnapshot(options: FleetSnapshotOptions = {}): FleetSnapshot {
   ensureStateRoot();
+  sweepStaleSessions();
   const cwd = options.cwd ?? process.cwd();
   const now = options.now ?? new Date();
   const generatedAt = now.toISOString();
   const repo = safe(() => getRepoInfo(cwd));
   const currentSession = repo && options.refreshCurrent !== false
-    ? safe(() => refreshSessionDirty(ensureSession(repo.root)))
+    ? safe(() => refreshExistingSession(repo.root))
     : null;
   const repoConfig = repo ? safe(() => ensureRepoConfig(repo.root)) : null;
   const hooksOk = repo ? safe(() => managedHooksInstalled(repo.root)) === true : false;
@@ -352,10 +353,10 @@ function buildChecks(input: {
     },
     {
       id: "current-session",
-      label: "Current worktree registered",
-      status: !input.repoPresent ? "unknown" : input.currentSessionPresent ? "ok" : "bad",
-      detail: input.currentSessionPresent ? "This worktree has a visible fleet session." : "This worktree is not currently registered.",
-      evidence: input.currentSessionPresent ? "session record refreshed" : "status --refresh-current would create one"
+      label: "Observer worktree",
+      status: !input.repoPresent ? "unknown" : input.currentSessionPresent ? "ok" : input.sessions.length ? "warn" : "unknown",
+      detail: input.currentSessionPresent ? "This worktree has a visible fleet session." : "The observer is not being counted as an agent session.",
+      evidence: input.currentSessionPresent ? "existing session refreshed" : "read-only observer"
     },
     {
       id: "agent-health",

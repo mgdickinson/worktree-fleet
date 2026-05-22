@@ -4,7 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -34,6 +34,14 @@ function run(command, args, cwd, env = {}) {
 
 function cliRun(args, cwd, state) {
   return run("node", [cli, ...args], cwd, { WORKTREE_FLEET_HOME: state });
+}
+
+function seedSession(cwd, state, agent = "generic-cli") {
+  run("node", [
+    "--input-type=module",
+    "-e",
+    `import { ensureStateRoot } from ${JSON.stringify(pathToFileURL(path.join(root, "dist/core/init.js")).href)}; import { createSession } from ${JSON.stringify(pathToFileURL(path.join(root, "dist/core/session.js")).href)}; ensureStateRoot(); createSession(process.cwd(), ${JSON.stringify(agent)});`
+  ], cwd, { WORKTREE_FLEET_HOME: state });
 }
 
 test("setup installs quiet hooks and writes colon-free main events", () => {
@@ -342,7 +350,7 @@ test("claude stop hook ignores transient session lock contention", () => {
 test("watch renders a one-shot fleet dashboard", () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   fs.writeFileSync(path.join(repo, "local.txt"), "local\n");
 
   const output = cliRun(["watch", "--once"], repo, state);
@@ -360,8 +368,8 @@ test("watch keeps one-shot CLI worktree snapshots until heartbeat expiry", () =>
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
 
-  cliRun(["status", "--refresh-current"], repo, state);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(repo, state);
+  seedSession(wt, state);
 
   const output = cliRun(["watch", "--once", "--no-refresh-current"], repo, state);
   assert.match(output, /sessions=2/);
@@ -369,10 +377,35 @@ test("watch keeps one-shot CLI worktree snapshots until heartbeat expiry", () =>
   assert.match(output, new RegExp(escapeRegExp(wt)));
 });
 
+test("observe does not register the dashboard as an agent session", async () => {
+  const { repo, state } = makeTempRepo();
+  cliRun(["setup", "--yes", "--no-adapters"], repo, state);
+
+  const port = await openPort();
+  const child = spawn("node", [cli, "observe", "--host", "127.0.0.1", "--port", String(port), "--no-open", "--interval", "1"], {
+    cwd: repo,
+    env: {
+      ...process.env,
+      WORKTREE_FLEET_HOME: state
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  try {
+    const snapshot = await waitForSnapshot(`http://127.0.0.1:${port}/api/snapshot`, (candidate) => candidate.repo.root);
+    assert.equal(snapshot.sessions.length, 0);
+    assert.equal(fs.existsSync(path.join(state, "sessions")), true);
+    assert.equal(fs.readdirSync(path.join(state, "sessions")).filter((entry) => entry.endsWith(".json")).length, 0);
+  } finally {
+    child.kill("SIGTERM");
+    await onceExit(child);
+  }
+});
+
 test("observe serves a live product dashboard and snapshot API", async () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   fs.writeFileSync(path.join(repo, "local.txt"), "local\n");
   cliRun(["intent", "declare", "app/planned.rb"], repo, state);
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
@@ -428,7 +461,7 @@ test("observe serves a live product dashboard and snapshot API", async () => {
 test("observe snapshot treats fresh hook-backed heartbeat as active even when helper pid exited", async () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
 
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
   assert.ok(sessionFile);
@@ -464,7 +497,7 @@ test("observe snapshot treats fresh hook-backed heartbeat as active even when he
 test("activity records durable usage artifacts", () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   cliRun(["intent", "declare", "app/patient_tasks.rb"], repo, state);
 
   const output = cliRun(["activity", "--limit", "10"], repo, state);
@@ -483,7 +516,7 @@ test("sync merges a clean main event into a sibling worktree", () => {
   const wt = path.join(tmp, "wt");
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   fs.appendFileSync(path.join(repo, "file.txt"), "two\n");
   run("git", ["add", "file.txt"], repo);
@@ -563,7 +596,7 @@ test("sync records an event cursor after absorbing main events", () => {
   const wt = path.join(tmp, "wt");
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   fs.appendFileSync(path.join(repo, "file.txt"), "two\n");
   run("git", ["add", "file.txt"], repo);
@@ -616,7 +649,7 @@ test("sidecar fetch tick publishes remote integration branch events", () => {
 
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   run("git", ["clone", "-q", remote, writer], tmp);
   run("git", ["config", "user.email", "test@example.com"], writer);
@@ -655,7 +688,7 @@ test("sidecar fetch tick publishes remote integration branch events", () => {
 
 test("sidecar records lifecycle and tick errors in activity", async () => {
   const { repo, state, tmp } = makeTempRepo();
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
   assert.ok(sessionFile);
   const sessionPath = path.join(state, "sessions", sessionFile);
@@ -695,7 +728,7 @@ test("sync blocks when the index has staged changes", () => {
   const wt = path.join(tmp, "wt");
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   fs.writeFileSync(path.join(wt, "local.txt"), "local\n");
   run("git", ["add", "local.txt"], wt);
@@ -713,7 +746,7 @@ test("sync blocks on dirty overlap", () => {
   const wt = path.join(tmp, "wt");
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   fs.writeFileSync(path.join(wt, "file.txt"), "local change\n");
 
@@ -730,7 +763,7 @@ test("sync blocks active merge operations before staged-index logic", () => {
   const wt = path.join(tmp, "wt");
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   run("git", ["worktree", "add", "-q", "-b", "feature", wt, "HEAD"], repo);
-  cliRun(["status", "--refresh-current"], wt, state);
+  seedSession(wt, state);
 
   fs.writeFileSync(path.join(repo, "file.txt"), "main change\n");
   run("git", ["add", "file.txt"], repo);
@@ -815,7 +848,7 @@ test("later main SHA that does not contain pending becomes divergence", async ()
 
 test("stale session writes preserve newer pending targets", async () => {
   const { repo, state } = makeTempRepo();
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
   assert.ok(sessionFile);
   const sessionPath = path.join(state, "sessions", sessionFile);
@@ -865,7 +898,7 @@ test("stale session writes preserve newer pending targets", async () => {
 
 test("ending a session removes matching intent state", async () => {
   const { repo, state } = makeTempRepo();
-  cliRun(["status", "--refresh-current"], repo, state);
+  seedSession(repo, state);
   const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
   assert.ok(sessionFile);
   const sessionPath = path.join(state, "sessions", sessionFile);

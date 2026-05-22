@@ -125,6 +125,11 @@ export function ensureSession(cwd: string, agentKind = "generic-cli"): SessionSt
   return findSessionForWorktree(cwd) ?? createSession(cwd, agentKind);
 }
 
+export function refreshExistingSession(cwd: string): SessionState | null {
+  const session = findSessionForWorktree(cwd);
+  return session ? refreshSessionDirty(session) : null;
+}
+
 export function refreshSessionDirty(session: SessionState): SessionState {
   const now = nowIso();
   const repo = getRepoInfo(session.worktree_path);
