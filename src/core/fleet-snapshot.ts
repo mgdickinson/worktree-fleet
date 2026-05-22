@@ -37,6 +37,8 @@ export interface FleetSnapshot {
     active_sessions: number;
     at_risk_sessions: number;
     dirty_files: number;
+    observed_files: number;
+    planned_files: number;
     pending_sessions: number;
     contended_sessions: number;
     blocked_sessions: number;
@@ -100,6 +102,15 @@ export interface FleetSessionSnapshot {
   dirty_count: number;
   touched_count: number;
   upcoming_count: number;
+  work: {
+    actual_files: string[];
+    observed_files: string[];
+    planned_files: string[];
+    actual_count: number;
+    observed_count: number;
+    planned_count: number;
+    automatic_count: number;
+  };
   contended_files: string[];
   integration: {
     pending_sha: string | null;
@@ -253,6 +264,9 @@ function summarizeSession(entry: WatchSessionEntry, latestMainEvent: MainEventSu
   const dirtyAgeMs = ageMs(session.dirty_refreshed_at, now);
   const lifecycle = classifyLifecycle({ pidAlive, heartbeatAgeMs });
   const pending = session.integration.pending;
+  const actualFiles = session.dirty_files;
+  const observedFiles = entry.intent?.tool_touched ?? [];
+  const plannedFiles = entry.intent?.upcoming ?? [];
   return {
     id: session.session_id,
     short_id: session.session_id.slice(0, 8),
@@ -269,12 +283,21 @@ function summarizeSession(entry: WatchSessionEntry, latestMainEvent: MainEventSu
     heartbeat_age_label: ageLabelFromMs(heartbeatAgeMs),
     dirty_age_ms: dirtyAgeMs,
     dirty_age_label: ageLabelFromMs(dirtyAgeMs),
-    dirty_files: session.dirty_files,
-    touched_files: entry.intent?.tool_touched ?? [],
-    upcoming_files: entry.intent?.upcoming ?? [],
-    dirty_count: session.dirty_files.length,
-    touched_count: entry.intent?.tool_touched.length ?? 0,
-    upcoming_count: entry.intent?.upcoming.length ?? 0,
+    dirty_files: actualFiles,
+    touched_files: observedFiles,
+    upcoming_files: plannedFiles,
+    dirty_count: actualFiles.length,
+    touched_count: observedFiles.length,
+    upcoming_count: plannedFiles.length,
+    work: {
+      actual_files: actualFiles,
+      observed_files: observedFiles,
+      planned_files: plannedFiles,
+      actual_count: actualFiles.length,
+      observed_count: observedFiles.length,
+      planned_count: plannedFiles.length,
+      automatic_count: uniqueStrings([...actualFiles, ...observedFiles]).length
+    },
     contended_files: entry.contended,
     integration: {
       pending_sha: pending?.sha ?? null,
@@ -352,8 +375,8 @@ function buildChecks(input: {
       id: "contention",
       label: "File contention",
       status: contended.length ? "warn" : "ok",
-      detail: contended.length ? `${contended.length} session(s) overlap on planned or dirty paths.` : "No overlapping dirty, touched, or upcoming paths.",
-      evidence: contended.length ? uniqueStrings(contended.flatMap((session) => session.contended_files)).join(", ") : "write sets do not overlap"
+      detail: contended.length ? `${contended.length} session(s) overlap on changed, observed, or planned paths.` : "No overlapping changed, observed, or planned paths.",
+      evidence: contended.length ? uniqueStrings(contended.flatMap((session) => session.contended_files)).join(", ") : "work sets do not overlap"
     },
     {
       id: "adapters",
@@ -369,7 +392,9 @@ function buildSummary(sessions: FleetSessionSnapshot[]): Omit<FleetSnapshot["sum
   return {
     active_sessions: sessions.filter((session) => session.lifecycle.status === "active").length,
     at_risk_sessions: sessions.filter((session) => ["stale", "offline", "unknown"].includes(session.lifecycle.status)).length,
-    dirty_files: sessions.reduce((sum, session) => sum + session.dirty_count, 0),
+    dirty_files: sessions.reduce((sum, session) => sum + session.work.actual_count, 0),
+    observed_files: sessions.reduce((sum, session) => sum + session.work.observed_count, 0),
+    planned_files: sessions.reduce((sum, session) => sum + session.work.planned_count, 0),
     pending_sessions: sessions.filter((session) => session.integration.pending_sha).length,
     contended_sessions: sessions.filter((session) => session.contended_files.length > 0).length,
     blocked_sessions: sessions.filter((session) => session.integration.blocked).length,

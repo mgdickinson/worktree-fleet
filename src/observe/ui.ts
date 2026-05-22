@@ -643,10 +643,10 @@ export function observeHtml(intervalMs: number): string {
       const items = [
         ['Active', snapshot.summary.active_sessions, 'heartbeating sessions'],
         ['At Risk', snapshot.summary.at_risk_sessions, 'stale or offline'],
-        ['Dirty', snapshot.summary.dirty_files, 'visible changed files'],
-        ['Pending', snapshot.summary.pending_sessions, 'main catch-ups'],
-        ['Contention', snapshot.summary.contended_sessions, 'overlapping sessions'],
-        ['Blocked', snapshot.summary.blocked_sessions + snapshot.summary.divergent_sessions, 'sync decisions']
+        ['Changed', snapshot.summary.dirty_files, 'files changed on disk'],
+        ['Observed', snapshot.summary.observed_files, 'host-observed tool paths'],
+        ['Planned', snapshot.summary.planned_files, 'manual early warnings'],
+        ['Pending', snapshot.summary.pending_sessions, 'main catch-ups']
       ];
       document.getElementById('metrics').innerHTML = items.map(function (item) {
         return '<div class="metric"><strong>' + esc(item[1]) + '</strong><span>' + esc(item[0]) + '</span><div class="evidence">' + esc(item[2]) + '</div></div>';
@@ -673,11 +673,20 @@ export function observeHtml(intervalMs: number): string {
     }
 
     function renderSession(session) {
+      const work = session.work || {
+        actual_files: session.dirty_files || [],
+        observed_files: session.touched_files || [],
+        planned_files: session.upcoming_files || [],
+        actual_count: session.dirty_count || 0,
+        observed_count: session.touched_count || 0,
+        planned_count: session.upcoming_count || 0
+      };
       const files = []
         .concat(session.contended_files.map(function (file) { return fileChip(file, 'hot', 'contended'); }))
-        .concat(session.dirty_files.slice(0, 8).map(function (file) { return fileChip(file, 'dirty', 'dirty'); }))
-        .concat(session.upcoming_files.slice(0, 5).map(function (file) { return fileChip(file, '', 'upcoming'); }));
-      const moreCount = Math.max(0, session.dirty_files.length + session.upcoming_files.length + session.contended_files.length - files.length);
+        .concat(work.actual_files.slice(0, 8).map(function (file) { return fileChip(file, 'dirty', 'changed'); }))
+        .concat(work.observed_files.slice(0, 5).map(function (file) { return fileChip(file, '', 'observed'); }))
+        .concat(work.planned_files.slice(0, 5).map(function (file) { return fileChip(file, '', 'planned'); }));
+      const moreCount = Math.max(0, work.actual_files.length + work.observed_files.length + work.planned_files.length + session.contended_files.length - files.length);
       if (moreCount) files.push('<span class="file-chip mono">+' + moreCount + ' more paths</span>');
       return '<article class="session">' +
         '<div class="session-head">' +
@@ -686,10 +695,10 @@ export function observeHtml(intervalMs: number): string {
           '<div class="mono" style="color: var(--muted); text-align: right;">pid ' + esc(session.pid) + '</div>' +
         '</div>' +
         '<div class="session-stats">' +
-          stat(session.branch, 'branch') +
           stat(session.heartbeat_age_label, 'heartbeat') +
-          stat(session.dirty_count, 'dirty') +
-          stat(session.upcoming_count + session.touched_count, 'intent') +
+          stat(work.actual_count, 'changed') +
+          stat(work.observed_count, 'observed') +
+          stat(work.planned_count, 'planned') +
         '</div>' +
         '<div class="detail" style="font-size: 13px; margin-top: 10px;">' + esc(session.lifecycle.detail) + renderIntegrationNote(session) + '</div>' +
         '<div class="file-list">' + files.join('') + '</div>' +
@@ -718,7 +727,7 @@ export function observeHtml(intervalMs: number): string {
         coordItem('Latest main event', coord.latest_main_event ? coord.latest_main_event.short_sha + ' from ' + coord.latest_main_event.source + ' ' + coord.latest_main_event.age_label + ' ago' : 'No main movement recorded for this repo yet.'),
         coordItem('Pending catch-up', coord.pending_sessions.length ? coord.pending_sessions.join(', ') : 'No sessions are waiting on a main update.'),
         coordItem('Blocked or divergent', coord.blocked_sessions.concat(coord.divergent_sessions).length ? coord.blocked_sessions.concat(coord.divergent_sessions).join(', ') : 'No sync block or divergent main target visible.'),
-        coordItem('Path contention', coord.contended_files.length ? coord.contended_files.join(', ') : 'No overlapping dirty, touched, or upcoming paths.')
+        coordItem('Path contention', coord.contended_files.length ? coord.contended_files.join(', ') : 'No overlapping changed, observed, or planned paths.')
       ];
       document.getElementById('coordination').innerHTML = rows.join('');
     }

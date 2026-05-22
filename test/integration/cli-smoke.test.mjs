@@ -374,6 +374,13 @@ test("observe serves a live product dashboard and snapshot API", async () => {
   cliRun(["setup", "--yes", "--adapter", "claude"], repo, state);
   cliRun(["status", "--refresh-current"], repo, state);
   fs.writeFileSync(path.join(repo, "local.txt"), "local\n");
+  cliRun(["intent", "declare", "app/planned.rb"], repo, state);
+  const sessionFile = fs.readdirSync(path.join(state, "sessions")).find((entry) => entry.endsWith(".json"));
+  assert.ok(sessionFile);
+  const intentFile = path.join(state, "intents", sessionFile);
+  const intent = JSON.parse(fs.readFileSync(intentFile, "utf8"));
+  intent.tool_touched = ["app/observed.rb"];
+  fs.writeFileSync(intentFile, JSON.stringify(intent, null, 2));
 
   const port = await openPort();
   const child = spawn("node", [cli, "observe", "--host", "127.0.0.1", "--port", String(port), "--no-open", "--interval", "1"], {
@@ -394,7 +401,14 @@ test("observe serves a live product dashboard and snapshot API", async () => {
     assert.ok(snapshot.summary.next_action);
     assert.ok(snapshot.checks.some((check) => check.id === "hooks" && check.status === "ok"));
     assert.ok(snapshot.checks.some((check) => check.id === "current-session" && check.status === "ok"));
-    assert.ok(snapshot.sessions.some((session) => session.dirty_files.includes("local.txt")));
+    const session = snapshot.sessions.find((entry) => entry.work.actual_files.includes("local.txt"));
+    assert.ok(session);
+    assert.ok(session.work.observed_files.includes("app/observed.rb"));
+    assert.ok(session.work.planned_files.includes("app/planned.rb"));
+    assert.equal(session.work.actual_count, 1);
+    assert.equal(session.work.observed_count, 1);
+    assert.equal(session.work.planned_count, 1);
+    assert.equal(session.work.automatic_count, 2);
 
     const html = await fetchText(`${baseUrl}/`);
     assert.match(html, /Fleet Observer/);
@@ -402,6 +416,9 @@ test("observe serves a live product dashboard and snapshot API", async () => {
     assert.match(html, /Agent Health/);
     assert.match(html, /Coordination Health/);
     assert.match(html, /Activity Feed/);
+    assert.match(html, /Observed/);
+    assert.match(html, /Planned/);
+    assert.doesNotMatch(html, /intent'\)/);
   } finally {
     child.kill("SIGTERM");
     await onceExit(child);

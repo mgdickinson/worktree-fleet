@@ -58,8 +58,8 @@ function managedBlock(integrationBranch: string): string {
     "- After creating or entering a worktree, run `worktree-fleet status --refresh-current` inside that worktree before editing.",
     `- Before catching up with \`${integrationBranch}\`, run \`worktree-fleet sync\` instead of raw \`git pull\`, \`git merge ${integrationBranch}\`, or \`git rebase ${integrationBranch}\`.`,
     "- To land completed work, run `worktree-fleet land` from the completed worktree instead of manually switching to the integration branch and merging.",
-    "- If status shows pending, divergent, blocked, dirty, or contended work, surface that state before continuing.",
-    "- If the user names files or areas of work, declare intent with `worktree-fleet intent declare <path...>`.",
+    "- If status shows pending, divergent, blocked, changed, observed, planned, or contended work, surface that state before continuing.",
+    "- Fleet automatically tracks changed files and host-observed tool paths. Use `worktree-fleet intent declare <path...>` only when early warning is useful before files are touched.",
     END
   ].join("\n");
 }

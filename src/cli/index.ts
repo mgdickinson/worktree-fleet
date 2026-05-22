@@ -708,14 +708,15 @@ function renderWatchFrame(options: WatchRenderOptions): string {
   if (watchSessions.length === 0) {
     lines.push("  no active fleet sessions");
   } else {
-    lines.push(`  ${pad("id", 8)} ${pad("agent/mode", 22)} ${pad("branch", 16)} ${pad("state", 10)} ${pad("dirty", 5)} ${pad("intent", 6)} ${pad("pending", 12)} ${pad("blocked", 22)} worktree`);
+    lines.push(`  ${pad("id", 8)} ${pad("agent/mode", 22)} ${pad("branch", 16)} ${pad("state", 10)} ${pad("chg", 5)} ${pad("obs", 5)} ${pad("plan", 5)} ${pad("pending", 12)} ${pad("blocked", 22)} worktree`);
     for (const entry of watchSessions) {
       const session = entry.session;
       const state = sessionStateLabel(session);
       const pending = session.integration.pending?.sha.slice(0, 12) ?? "-";
       const blocked = session.integration.blocked ? (session.integration.blocked_reason ?? "blocked") : "-";
-      const intentCount = (entry.intent?.tool_touched.length ?? 0) + (entry.intent?.upcoming.length ?? 0);
-      lines.push(`  ${pad(session.session_id.slice(0, 8), 8)} ${pad(`${session.agent_kind}/${entry.adapterMode}`, 22)} ${pad(session.branch, 16)} ${pad(state, 10)} ${pad(String(session.dirty_files.length), 5)} ${pad(String(intentCount), 6)} ${pad(pending, 12)} ${pad(blocked, 22)} ${session.worktree_path}`);
+      const observedCount = entry.intent?.tool_touched.length ?? 0;
+      const plannedCount = entry.intent?.upcoming.length ?? 0;
+      lines.push(`  ${pad(session.session_id.slice(0, 8), 8)} ${pad(`${session.agent_kind}/${entry.adapterMode}`, 22)} ${pad(session.branch, 16)} ${pad(state, 10)} ${pad(String(session.dirty_files.length), 5)} ${pad(String(observedCount), 5)} ${pad(String(plannedCount), 5)} ${pad(pending, 12)} ${pad(blocked, 22)} ${session.worktree_path}`);
     }
   }
   lines.push("");
@@ -726,9 +727,9 @@ function renderWatchFrame(options: WatchRenderOptions): string {
     for (const entry of watchSessions) {
       const session = entry.session;
       lines.push(`  ${bold(session.session_id.slice(0, 8))} ${session.agent_kind} ${dim(session.worktree_path)}`);
-      lines.push(`    dirty:    ${formatList(session.dirty_files)}`);
-      lines.push(`    touched:  ${formatList(entry.intent?.tool_touched ?? [])}`);
-      lines.push(`    upcoming: ${formatList(entry.intent?.upcoming ?? [])}`);
+      lines.push(`    changed:  ${formatList(session.dirty_files)}`);
+      lines.push(`    observed: ${formatList(entry.intent?.tool_touched ?? [])}`);
+      lines.push(`    planned:  ${formatList(entry.intent?.upcoming ?? [])}`);
       lines.push(`    contended:${entry.contended.length ? ` ${red(entry.contended.join(", "))}` : " -"}`);
       lines.push(`    pending:  ${formatPending(session)}`);
       lines.push(`    blocked:  ${formatBlocked(session)}`);

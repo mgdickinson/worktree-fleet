@@ -28,7 +28,7 @@ If Claude tries to mutate worktrees with raw Git, the plugin makes it check the 
 ## What You Get
 
 - Active Claude sessions across sibling worktrees
-- Dirty files and declared edit intent
+- Changed files, host-observed tool paths, and optional planned intent
 - Pending integration-branch updates
 - Safe automatic catch-up when possible
 - Clear blocked states when sync would be risky
@@ -53,7 +53,7 @@ When you want the terminal version:
 worktree-fleet watch
 ```
 
-It shows sessions, worktrees, dirty files, intents, pending updates, blocked reasons, divergent targets, and recent activity in a compact terminal frame. Use `worktree-fleet watch --web` to launch the local observer from the watch command.
+It shows sessions, worktrees, changed files, observed tool paths, optional planned intent, pending updates, blocked reasons, divergent targets, and recent activity in a compact terminal frame. Use `worktree-fleet watch --web` to launch the local observer from the watch command.
 
 When you want a one-shot health check:
 
@@ -187,8 +187,8 @@ This repo uses `worktree-fleet` to coordinate AI agents across sibling Git workt
 - After creating or entering a worktree, run `worktree-fleet status --refresh-current` inside that worktree before editing.
 - Do not catch up with raw `git pull`, `git merge main`, or `git rebase main`; run `worktree-fleet sync` instead. Replace `main` with the repo's integration branch if different.
 - To land completed work, run `worktree-fleet land` from the completed worktree instead of manually switching to the integration branch and merging.
-- If fleet status shows pending, divergent, blocked, dirty, or contended work, surface that state before continuing.
-- If the user names files or areas of work, declare intent with `worktree-fleet intent declare <path...>` and release it with `worktree-fleet intent release <path...>` when done.
+- If fleet status shows pending, divergent, blocked, changed, observed, planned, or contended work, surface that state before continuing.
+- Fleet automatically tracks changed files and host-observed tool paths. Use `worktree-fleet intent declare <path...>` only when you need an early warning before files are touched, and release it with `worktree-fleet intent release <path...>` when that planned work is no longer active.
 - Use `worktree-fleet observe` when the user asks whether fleet is working or wants to inspect active sessions.
 ```
 
@@ -203,8 +203,8 @@ This repo uses `worktree-fleet` for multi-agent Git worktree coordination.
 - Treat `worktree-fleet observe` as the human-facing source of truth for active sessions, heartbeats, pending main updates, blocked syncs, divergence, and path contention.
 - Use `worktree-fleet sync` instead of raw `git pull`, `git merge main`, or `git rebase main` when catching up with the integration branch.
 - Use `worktree-fleet land` to merge completed work back to the integration branch.
-- Before worktree lifecycle changes, inspect fleet status and report any pending, divergent, blocked, dirty, or contended state.
-- When planning edits to named files or directories, publish intent with `worktree-fleet intent declare <path...>` and release it when the work is no longer active.
+- Before worktree lifecycle changes, inspect fleet status and report any pending, divergent, blocked, changed, observed, planned, or contended state.
+- Fleet automatically tracks changed files and host-observed tool paths. Publish planned intent with `worktree-fleet intent declare <path...>` only when early warning is useful before files are touched, and release it when the planned work is no longer active.
 - Never bypass a worktree-fleet hook block; follow the message and ask for human help if the state requires a decision.
 ```
 
