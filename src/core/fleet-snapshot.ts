@@ -419,7 +419,7 @@ function nextAction(repo: ReturnType<typeof getRepoInfo> | null, hooksOk: boolea
   if (!repo) return "Open worktree-fleet observe inside a git repo so fleet can resolve worktree state.";
   if (!hooksOk) return "Run worktree-fleet setup in this repo; the safety hooks that record main movement are missing.";
   const offline = sessions.find((session) => session.lifecycle.status === "offline");
-  if (offline) return `${offline.short_id} is registered but not running. Restart that agent or let fleet clean up the stale session.`;
+  if (offline) return `${offline.short_id} has not heartbeated for ${offline.heartbeat_age_label}. Restart that agent or let fleet clean up the stale session.`;
   const blocked = sessions.find((session) => session.integration.blocked);
   if (blocked) return `${blocked.short_id} is blocked: ${blocked.integration.blocked_reason ?? "sync blocked"}. Resolve the listed files, then run worktree-fleet sync.`;
   const divergent = sessions.find((session) => session.integration.divergent_targets.length > 0);
@@ -435,13 +435,6 @@ function nextAction(repo: ReturnType<typeof getRepoInfo> | null, hooksOk: boolea
 }
 
 function classifyLifecycle(input: { pidAlive: boolean | null; heartbeatAgeMs: number | null }): FleetSessionSnapshot["lifecycle"] {
-  if (input.pidAlive === false) {
-    return {
-      status: "offline",
-      label: "Not running",
-      detail: "The session file exists, but the recorded process is gone."
-    };
-  }
   if (input.heartbeatAgeMs === null) {
     return {
       status: "unknown",
@@ -453,7 +446,9 @@ function classifyLifecycle(input: { pidAlive: boolean | null; heartbeatAgeMs: nu
     return {
       status: "active",
       label: "Active",
-      detail: "Heartbeat was refreshed recently."
+      detail: input.pidAlive === false
+        ? "The recorded helper PID has exited, but the heartbeat is fresh; this is normal for hook-backed sessions."
+        : "Heartbeat was refreshed recently."
     };
   }
   if (input.heartbeatAgeMs <= IDLE_HEARTBEAT_MS) {
@@ -467,13 +462,17 @@ function classifyLifecycle(input: { pidAlive: boolean | null; heartbeatAgeMs: nu
     return {
       status: "stale",
       label: "Stale",
-      detail: "Heartbeat is old enough to deserve a check."
+      detail: input.pidAlive === false
+        ? "Heartbeat is old and the recorded helper PID has exited."
+        : "Heartbeat is old enough to deserve a check."
     };
   }
   return {
     status: "offline",
     label: "Not heartbeating",
-    detail: "Heartbeat is beyond the fleet freshness window."
+    detail: input.pidAlive === false
+      ? "No fresh heartbeat; the recorded helper PID has also exited."
+      : "Heartbeat is beyond the fleet freshness window."
   };
 }
 

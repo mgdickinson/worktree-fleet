@@ -408,7 +408,7 @@ test("observe serves a live product dashboard and snapshot API", async () => {
   }
 });
 
-test("observe snapshot makes dead registered agents obvious", async () => {
+test("observe snapshot treats fresh hook-backed heartbeat as active even when helper pid exited", async () => {
   const { repo, state } = makeTempRepo();
   cliRun(["setup", "--yes", "--no-adapters"], repo, state);
   cliRun(["status", "--refresh-current"], repo, state);
@@ -432,10 +432,12 @@ test("observe snapshot makes dead registered agents obvious", async () => {
 
   try {
     const snapshot = await waitForSnapshot(`http://127.0.0.1:${port}/api/snapshot`, (candidate) =>
-      candidate.sessions.some((entry) => entry.lifecycle.status === "offline")
+      candidate.sessions.some((entry) => entry.pid_alive === false && entry.lifecycle.status === "active")
     );
-    assert.ok(snapshot.summary.next_action.includes("not running"));
-    assert.ok(snapshot.checks.some((check) => check.id === "agent-health" && check.status === "bad"));
+    const session = snapshot.sessions.find((entry) => entry.pid_alive === false);
+    assert.equal(session.lifecycle.label, "Active");
+    assert.ok(session.lifecycle.detail.includes("heartbeat is fresh"));
+    assert.ok(snapshot.checks.some((check) => check.id === "agent-health" && check.status === "ok"));
   } finally {
     child.kill("SIGTERM");
     await onceExit(child);
