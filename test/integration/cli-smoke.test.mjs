@@ -580,14 +580,18 @@ test("land refuses unsafe worktrees", () => {
   assert.match(dirtyFeature.stdout, /current worktree has uncommitted changes/);
   fs.unlinkSync(path.join(wt, "dirty.txt"));
 
-  fs.writeFileSync(path.join(repo, "main-dirty.txt"), "dirty\n");
+  // Genuine conflict: the integration worktree has an uncommitted edit to a file
+  // this land would fast-forward (file.txt — changed by the feature commit).
+  // Unrelated integration dirt is allowed to land (see land.test.mjs); only
+  // overlap blocks.
+  fs.appendFileSync(path.join(repo, "file.txt"), "concurrent integration edit\n");
   const dirtyMain = spawnSync("node", [cli, "land"], {
     cwd: wt,
     env: { ...process.env, WORKTREE_FLEET_HOME: state },
     encoding: "utf8"
   });
   assert.equal(dirtyMain.status, 1);
-  assert.match(dirtyMain.stdout, /integration worktree has uncommitted changes/);
+  assert.match(dirtyMain.stdout, /uncommitted changes to files this land would update/);
   assert.notEqual(run("git", ["rev-parse", "HEAD"], repo).trim(), featureHead);
 });
 

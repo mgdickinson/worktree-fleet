@@ -1,6 +1,6 @@
 import { isAncestor } from "../git/ancestry.js";
 import { git } from "../git/command.js";
-import { getDirtyFiles } from "../git/dirty.js";
+import { getDirtyFiles, getIncomingFiles } from "../git/dirty.js";
 import { getActiveOperation } from "../git/operations.js";
 import { getHeadSha, getRepoInfo } from "../git/repo.js";
 import { mainAdvanced } from "../hooks/main-advanced.js";
@@ -59,11 +59,6 @@ export function landCurrentWorktree(cwd: string): LandResult {
     return { status: "blocked", message: `integration worktree has git operation in progress: ${integrationOperation}` };
   }
 
-  const integrationDirty = getDirtyFiles(integration.path);
-  if (integrationDirty.length > 0) {
-    return { status: "blocked", message: `integration worktree has uncommitted changes: ${integrationDirty.join(",")}` };
-  }
-
   const integrationHead = getHeadSha(integration.path);
   const featureHead = getHeadSha(refreshedRepo.root);
   if (!isAncestor(refreshedRepo.root, integrationHead, featureHead)) {
@@ -71,6 +66,24 @@ export function landCurrentWorktree(cwd: string): LandResult {
       status: "blocked",
       message: `${config.integration_branch} cannot fast-forward to ${refreshedRepo.branch}; sync or merge ${config.integration_branch} into this worktree first`
     };
+  }
+
+  // A fast-forward only writes the files that changed between the integration
+  // head and the feature head, so uncommitted work in the integration worktree
+  // is a problem ONLY when it touches one of those paths — that is the case git
+  // itself would refuse ("would be overwritten by merge"). Unrelated dirt (a
+  // sibling session editing docs, scratch files) is harmless and must not block.
+  // The `git merge --ff-only` below remains the final backstop.
+  const integrationDirty = getDirtyFiles(integration.path);
+  if (integrationDirty.length > 0) {
+    const incoming = new Set(getIncomingFiles(integration.path, featureHead));
+    const overlap = integrationDirty.filter((file) => incoming.has(file));
+    if (overlap.length > 0) {
+      return {
+        status: "blocked",
+        message: `integration worktree has uncommitted changes to files this land would update: ${overlap.join(",")}`
+      };
+    }
   }
 
   const merge = git(integration.path, ["merge", "--ff-only", featureHead]);
